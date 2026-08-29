@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
+import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { LK4_PRO_LIMITS } from './lk4pro.definition.js';
 import { mergeThreeMFParts } from './threemf-parts.js';
@@ -63,10 +64,22 @@ export class Viewer {
     return new Promise((resolve, reject) => {
       try {
         let object;
+        let sliceBuffer = arrayBuffer;
+        let sliceExt = extension;
 
         if (extension === '3mf') {
           const loader = new ThreeMFLoader();
           object = loader.parse(mergeThreeMFParts(arrayBuffer));
+
+          // O conversor 3MF embutido no cura-wasm não percebe objetos
+          // multi-parte (Bambu/Orca Slicer) e falha ao fatiar ("FS error").
+          // Como já montámos a malha correta aqui, exportamo-la como STL
+          // binário (nas coordenadas originais do modelo) e é isso que vai
+          // para o motor — só a pré-visualização usa o objeto 3MF.
+          object.updateMatrixWorld(true);
+          const stlData = new STLExporter().parse(object, { binary: true });
+          sliceBuffer = stlData.buffer;
+          sliceExt = 'stl';
         } else {
           const loader = new STLLoader();
           const geometry = loader.parse(arrayBuffer);
@@ -110,7 +123,7 @@ export class Viewer {
 
         this._frame(sizeX, sizeZ, sizeY);
 
-        resolve({ x: sizeX, y: sizeY, z: sizeZ });
+        resolve({ x: sizeX, y: sizeY, z: sizeZ, sliceBuffer, sliceExt });
       } catch (err) {
         reject(err);
       }

@@ -67,12 +67,12 @@ async function handleFile(file) {
   const ext = match[1];
   setStatus(`A carregar ${file.name}…`);
   const buffer = await file.arrayBuffer();
-  currentModel = buffer;
-  currentModelExt = ext;
   currentGcodeName = file.name.replace(/\.(stl|3mf)$/i, '.gcode');
 
   try {
     const dims = await viewer.loadModel(buffer.slice(0), ext);
+    currentModel = dims.sliceBuffer;
+    currentModelExt = dims.sliceExt;
     dropzone.classList.add('hidden');
     modelInfo.hidden = false;
     modelInfo.innerHTML = `<strong>${file.name}</strong><br/>${dims.x.toFixed(1)} × ${dims.y.toFixed(1)} × ${dims.z.toFixed(1)} mm`;
