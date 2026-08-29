@@ -1,0 +1,21 @@
+{
+  "name": "lk4pro-slicer",
+  "version": "1.0.0",
+  "description": "Slicer no browser (CuraEngine via WASM) para a Longer LK4 Pro, com envio direto para Mainsail/Klipper",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "cura-wasm": "^1.5.2",
+    "cura-wasm-definitions": "^1.5.1",
+    "lodash": "^4.17.21",
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.21",
+    "vite-plugin-static-copy": "^1.0.6"
+  }
+}

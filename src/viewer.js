@@ -1,0 +1,130 @@
+import * as THREE from 'three';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { LK4_PRO_LIMITS } from './lk4pro.definition.js';
+
+export class Viewer {
+  constructor(container) {
+    this.container = container;
+    this.scene = new THREE.Scene();
+    this.scene.background = null;
+
+    const { clientWidth: w, clientHeight: h } = container;
+    this.camera = new THREE.PerspectiveCamera(45, w / h, 1, 2000);
+    this.camera.position.set(220, 260, 320);
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.renderer.setSize(w, h);
+    container.appendChild(this.renderer.domElement);
+
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.target.set(LK4_PRO_LIMITS.bedWidth / 2, 0, LK4_PRO_LIMITS.bedDepth / 2);
+    this.controls.update();
+
+    this._buildLights();
+    this._buildBed();
+    this.mesh = null;
+
+    window.addEventListener('resize', () => this._onResize());
+    this._animate();
+  }
+
+  _buildLights() {
+    this.scene.add(new THREE.HemisphereLight(0xbfd9ff, 0x14171a, 1.1));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+    dir.position.set(150, 400, 200);
+    this.scene.add(dir);
+  }
+
+  _buildBed() {
+    const { bedWidth, bedDepth } = LK4_PRO_LIMITS;
+    const grid = new THREE.GridHelper(Math.max(bedWidth, bedDepth), 22, 0x2a2f35, 0x1f2327);
+    grid.position.set(bedWidth / 2, 0, bedDepth / 2);
+    this.scene.add(grid);
+
+    const plateGeo = new THREE.PlaneGeometry(bedWidth, bedDepth);
+    const plateMat = new THREE.MeshBasicMaterial({ color: 0x0f1113, transparent: true, opacity: 0.5 });
+    const plate = new THREE.Mesh(plateGeo, plateMat);
+    plate.rotation.x = -Math.PI / 2;
+    plate.position.set(bedWidth / 2, -0.05, bedDepth / 2);
+    this.scene.add(plate);
+
+    const edges = new THREE.EdgesGeometry(plateGeo);
+    const outline = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x00d4aa, transparent: true, opacity: 0.5 }));
+    outline.rotation.x = -Math.PI / 2;
+    outline.position.set(bedWidth / 2, 0, bedDepth / 2);
+    this.scene.add(outline);
+  }
+
+  loadSTL(arrayBuffer) {
+    return new Promise((resolve, reject) => {
+      try {
+        const loader = new STLLoader();
+        const geometry = loader.parse(arrayBuffer);
+        geometry.computeVertexNormals();
+        geometry.computeBoundingBox();
+
+        if (this.mesh) {
+          this.scene.remove(this.mesh);
+          this.mesh.geometry.dispose();
+          this.mesh.material.dispose();
+        }
+
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x00d4aa,
+          metalness: 0.1,
+          roughness: 0.55,
+          flatShading: false
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+
+        // Centra o modelo sobre a mesa e assenta-o em Z=0
+        const bbox = geometry.boundingBox;
+        const sizeX = bbox.max.x - bbox.min.x;
+        const sizeY = bbox.max.y - bbox.min.y;
+        const sizeZ = bbox.max.z - bbox.min.z;
+
+        mesh.rotation.x = -Math.PI / 2; // STL costuma vir com Z para cima -> Three usa Y para cima
+        mesh.position.set(
+          LK4_PRO_LIMITS.bedWidth / 2 - (bbox.min.x + sizeX / 2),
+          -bbox.min.z,
+          LK4_PRO_LIMITS.bedDepth / 2 + (bbox.min.y + sizeY / 2)
+        );
+
+        this.scene.add(mesh);
+        this.mesh = mesh;
+
+        this._frame(sizeX, sizeZ, sizeY);
+
+        resolve({ x: sizeX, y: sizeY, z: sizeZ });
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  _frame(sizeX, sizeY, sizeZ) {
+    const maxDim = Math.max(sizeX, sizeY, sizeZ, 60);
+    const dist = maxDim * 2.2;
+    this.camera.position.set(
+      LK4_PRO_LIMITS.bedWidth / 2 + dist * 0.6,
+      dist * 0.55,
+      LK4_PRO_LIMITS.bedDepth / 2 + dist * 0.6
+    );
+    this.controls.update();
+  }
+
+  _onResize() {
+    const { clientWidth: w, clientHeight: h } = this.container;
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h);
+  }
+
+  _animate() {
+    requestAnimationFrame(() => this._animate());
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+  }
+}

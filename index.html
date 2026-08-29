@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LK4 Pro Slicer</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <svg class="corner-icon" viewBox="0 0 24 24" width="20" height="20" fill="none">
+          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M12 3v4M12 17v4M3 12h4M17 12h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <div>
+          <h1>LK4 Pro Slicer</h1>
+          <span class="subtitle">CuraEngine no browser &middot; Longer LK4 Pro</span>
+        </div>
+      </div>
+      <div class="engine-status" id="engineStatus">
+        <span class="dot" id="engineDot"></span>
+        <span id="engineStatusText">motor por iniciar</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="viewport-pane">
+        <div id="viewport"></div>
+        <div class="dropzone" id="dropzone">
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="none"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <p>Arrasta um <strong>.stl</strong> para aqui<br/>ou clica para escolher</p>
+          <input type="file" id="fileInput" accept=".stl" hidden />
+        </div>
+        <div class="model-info" id="modelInfo" hidden></div>
+        <div class="corner-leveling" title="Nivelamento manual — 4 cantos">
+          <span></span><span></span><span></span><span></span>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-scroll">
+          <section class="group">
+            <h2>Qualidade</h2>
+            <label class="field">
+              <span>Perfil</span>
+              <select id="qualityPreset">
+                <option value="draft">Rascunho — 0.28mm</option>
+                <option value="standard" selected>Standard — 0.2mm</option>
+                <option value="fine">Fino — 0.12mm</option>
+                <option value="custom">Personalizado</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Altura de camada (mm)</span>
+              <input type="number" id="layerHeight" step="0.02" min="0.05" max="0.32" value="0.2" />
+            </label>
+            <label class="field">
+              <span>Espessura das paredes (mm)</span>
+              <input type="number" id="wallThickness" step="0.1" min="0.4" max="3.2" value="0.8" />
+            </label>
+          </section>
+
+          <section class="group">
+            <h2>Enchimento</h2>
+            <label class="field">
+              <span>Densidade (%)</span>
+              <input type="range" id="infillDensity" min="0" max="100" step="5" value="20" />
+              <output id="infillDensityOut">20%</output>
+            </label>
+            <label class="field">
+              <span>Padrão</span>
+              <select id="infillPattern">
+                <option value="cubic" selected>Cúbico</option>
+                <option value="grid">Grelha</option>
+                <option value="triangles">Triângulos</option>
+                <option value="gyroid">Gyroid</option>
+                <option value="lines">Linhas</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="group">
+            <h2>Material — LK4 Pro (máx. 250°C bico / 100°C cama)</h2>
+            <label class="field">
+              <span>Temp. bico (°C)</span>
+              <input type="number" id="printTemp" min="150" max="250" value="200" />
+            </label>
+            <label class="field">
+              <span>Temp. cama (°C)</span>
+              <input type="number" id="bedTemp" min="0" max="100" value="60" />
+            </label>
+            <label class="field">
+              <span>Velocidade de impressão (mm/s)</span>
+              <input type="number" id="printSpeed" min="10" max="150" value="50" />
+            </label>
+          </section>
+
+          <section class="group">
+            <h2>Suporte &amp; aderência</h2>
+            <label class="field checkbox">
+              <input type="checkbox" id="supportEnable" />
+              <span>Gerar suportes</span>
+            </label>
+            <label class="field">
+              <span>Aderência à cama</span>
+              <select id="adhesionType">
+                <option value="skirt" selected>Skirt</option>
+                <option value="brim">Brim</option>
+                <option value="raft">Raft</option>
+                <option value="none">Nenhuma</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="group">
+            <h2>G-code inicial/final</h2>
+            <label class="field checkbox">
+              <input type="checkbox" id="useKlipperMacros" />
+              <span>Usar macros Klipper (PRINT_START / PRINT_END)</span>
+            </label>
+            <p class="hint">Só ativa se tiveres estas macros definidas no <code>printer.cfg</code>. Caso contrário mantém o G-code Marlin padrão, que o Klipper também aceita.</p>
+          </section>
+        </div>
+
+        <div class="panel-footer">
+          <button id="sliceBtn" class="primary" disabled>Fatiar</button>
+          <div class="progress-row" id="progressRow" hidden>
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+            <span id="progressLabel">0%</span>
+          </div>
+          <div class="result-row" id="resultRow" hidden>
+            <div class="result-stats" id="resultStats"></div>
+            <div class="result-actions">
+              <button id="downloadBtn" class="secondary">Descarregar .gcode</button>
+              <button id="sendMainsailBtn" class="secondary">Enviar para Mainsail</button>
+            </div>
+            <label class="field small">
+              <span>IP / host do Mainsail</span>
+              <input type="text" id="mainsailHost" placeholder="192.168.1.222" />
+            </label>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="statusbar">
+      <span id="statusMessage">Carrega um modelo STL para começar.</span>
+    </footer>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
