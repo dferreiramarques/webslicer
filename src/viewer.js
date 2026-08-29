@@ -3,6 +3,7 @@ import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { LK4_PRO_LIMITS } from './lk4pro.definition.js';
+import { mergeThreeMFParts } from './threemf-parts.js';
 
 export class Viewer {
   constructor(container) {
@@ -65,7 +66,7 @@ export class Viewer {
 
         if (extension === '3mf') {
           const loader = new ThreeMFLoader();
-          object = loader.parse(arrayBuffer);
+          object = loader.parse(mergeThreeMFParts(arrayBuffer));
         } else {
           const loader = new STLLoader();
           const geometry = loader.parse(arrayBuffer);
