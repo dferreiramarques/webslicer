@@ -1,7 +1,7 @@
 import './style.css';
 import { CuraWASM } from 'cura-wasm';
 import { Viewer } from './viewer.js';
-import { buildLk4ProDefinition, LK4_PRO_LIMITS } from './lk4pro.definition.js';
+import { buildLk4ProDefinition, LK4_PRO_LIMITS, KLIPPER_MACRO_SENTINELS } from './lk4pro.definition.js';
 
 // --- Elementos ---
 const el = (id) => document.getElementById(id);
@@ -140,6 +140,19 @@ function buildOverrides() {
   return overrides;
 }
 
+// O cura-wasm não resolve placeholders {setting} no G-code inicial/final
+// (isso é feito pela app Python do Cura desktop, não pelo CuraEngine), por
+// isso o PRINT_START do modo Klipper usa tokens sentinela que substituímos
+// aqui pelas temperaturas reais (com o mesmo "bump" da camada 0 usado nos
+// overrides, já que o placeholder original apontava para as versões _layer_0).
+function substituteKlipperMacroTemps(gcode, printTemp, bedTemp) {
+  const text = new TextDecoder().decode(gcode);
+  const replaced = text
+    .split(KLIPPER_MACRO_SENTINELS.bedTemp).join(String(bedTemp + 5))
+    .split(KLIPPER_MACRO_SENTINELS.extruderTemp).join(String(printTemp + 5));
+  return new TextEncoder().encode(replaced).buffer;
+}
+
 sliceBtn.addEventListener('click', async () => {
   if (!currentModel) return;
 
@@ -171,7 +184,7 @@ sliceBtn.addEventListener('click', async () => {
     engine['config'].overrides = buildOverrides();
 
     const { gcode, metadata } = await engine.slice(currentModel.slice(0), currentModelExt);
-    currentGcode = gcode;
+    currentGcode = useKlipperMacros ? substituteKlipperMacroTemps(gcode, printTemp, bedTemp) : gcode;
 
     setEngineStatus('ready', 'motor pronto');
     progressRow.hidden = true;

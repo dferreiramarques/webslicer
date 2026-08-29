@@ -28,7 +28,19 @@ G1 X0.4 Y20 Z0.3 F1500.0 E30 ; segunda linha de purga
 G92 E0 ; reset extrusora
 G1 Z2.0 F3000`;
 
-const START_GCODE_KLIPPER_MACRO = `PRINT_START BED_TEMP={material_bed_temperature_layer_0} EXTRUDER_TEMP={material_print_temperature_layer_0}`;
+/**
+ * O CuraEngine (via cura-wasm) não resolve placeholders `{setting}` dentro do
+ * G-code inicial/final — essa substituição só existe no Cura desktop (é
+ * feita pela app Python, não pelo motor). Por isso usamos aqui tokens
+ * sentinela fixos, que o main.js substitui pelo valor real das temperaturas
+ * já depois de fatiar (ver KLIPPER_MACRO_SENTINELS).
+ */
+export const KLIPPER_MACRO_SENTINELS = {
+  bedTemp: '__WEBSLICER_BED_TEMP__',
+  extruderTemp: '__WEBSLICER_EXTRUDER_TEMP__'
+};
+
+const START_GCODE_KLIPPER_MACRO = `PRINT_START BED_TEMP=${KLIPPER_MACRO_SENTINELS.bedTemp} EXTRUDER_TEMP=${KLIPPER_MACRO_SENTINELS.extruderTemp}`;
 
 const END_GCODE_MARLIN = `; LK4 Pro — end G-code
 G91 ; posicionamento relativo
@@ -37,7 +49,7 @@ G1 E-2 Z0.2 F2400
 G1 X5 Y5 F3000
 G1 Z10
 G90 ; posicionamento absoluto
-G1 X0 Y{machine_depth}
+G1 X0 Y220 ; apresenta a impressão (Y = profundidade da mesa)
 M106 S0
 M104 S0
 M140 S0
