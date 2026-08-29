@@ -31,7 +31,8 @@ const QUALITY_PRESETS = {
   fine: 0.12
 };
 
-let currentSTL = null; // ArrayBuffer
+let currentModel = null; // ArrayBuffer
+let currentModelExt = 'stl'; // 'stl' | '3mf'
 let currentGcode = null; // ArrayBuffer
 let currentGcodeName = 'model.gcode';
 
@@ -58,17 +59,20 @@ fileInput.addEventListener('change', (e) => {
 });
 
 async function handleFile(file) {
-  if (!file.name.toLowerCase().endsWith('.stl')) {
-    setStatus('Só ficheiros .stl são suportados por agora.', true);
+  const match = file.name.toLowerCase().match(/\.(stl|3mf)$/);
+  if (!match) {
+    setStatus('Só ficheiros .stl ou .3mf são suportados por agora.', true);
     return;
   }
+  const ext = match[1];
   setStatus(`A carregar ${file.name}…`);
   const buffer = await file.arrayBuffer();
-  currentSTL = buffer;
-  currentGcodeName = file.name.replace(/\.stl$/i, '.gcode');
+  currentModel = buffer;
+  currentModelExt = ext;
+  currentGcodeName = file.name.replace(/\.(stl|3mf)$/i, '.gcode');
 
   try {
-    const dims = await viewer.loadSTL(buffer.slice(0));
+    const dims = await viewer.loadModel(buffer.slice(0), ext);
     dropzone.classList.add('hidden');
     modelInfo.hidden = false;
     modelInfo.innerHTML = `<strong>${file.name}</strong><br/>${dims.x.toFixed(1)} × ${dims.y.toFixed(1)} × ${dims.z.toFixed(1)} mm`;
@@ -82,7 +86,7 @@ async function handleFile(file) {
     resultRow.hidden = true;
   } catch (err) {
     console.error(err);
-    setStatus('Não foi possível ler este STL.', true);
+    setStatus(`Não foi possível ler este ${ext.toUpperCase()}.`, true);
   }
 }
 
@@ -137,7 +141,7 @@ function buildOverrides() {
 }
 
 sliceBtn.addEventListener('click', async () => {
-  if (!currentSTL) return;
+  if (!currentModel) return;
 
   const printTemp = Number(el('printTemp').value);
   const bedTemp = Number(el('bedTemp').value);
@@ -166,7 +170,7 @@ sliceBtn.addEventListener('click', async () => {
 
     engine['config'].overrides = buildOverrides();
 
-    const { gcode, metadata } = await engine.slice(currentSTL.slice(0), 'stl');
+    const { gcode, metadata } = await engine.slice(currentModel.slice(0), currentModelExt);
     currentGcode = gcode;
 
     setEngineStatus('ready', 'motor pronto');

@@ -1,4 +1,4 @@
-# LK4 Pro Slicer
+# WebSlicer
 
 Slicer 100% no browser para a **Longer LK4 Pro**, construído sobre o
 [CuraEngine](https://github.com/Ultimaker/CuraEngine) real, compilado para
@@ -9,6 +9,7 @@ fatiamento corre inteiramente no teu computador/telemóvel.
 ## Porquê
 
 - Sem instalação — abre um separador e fatia.
+- Aceita ficheiros **.stl** e **.3mf**.
 - Definição de impressora feita à medida da LK4 Pro (220×220×250mm, bico
   0.4mm, cama até 100°C, bico até 250°C, sem ABL).
 - Preview 3D do modelo sobre a mesa (three.js).

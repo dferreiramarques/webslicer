@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { LK4_PRO_LIMITS } from './lk4pro.definition.js';
 
@@ -57,43 +58,54 @@ export class Viewer {
     this.scene.add(outline);
   }
 
-  loadSTL(arrayBuffer) {
+  loadModel(arrayBuffer, extension) {
     return new Promise((resolve, reject) => {
       try {
-        const loader = new STLLoader();
-        const geometry = loader.parse(arrayBuffer);
-        geometry.computeVertexNormals();
-        geometry.computeBoundingBox();
+        let object;
+
+        if (extension === '3mf') {
+          const loader = new ThreeMFLoader();
+          object = loader.parse(arrayBuffer);
+        } else {
+          const loader = new STLLoader();
+          const geometry = loader.parse(arrayBuffer);
+          geometry.computeVertexNormals();
+          const material = new THREE.MeshStandardMaterial({
+            color: 0x00d4aa,
+            metalness: 0.1,
+            roughness: 0.55,
+            flatShading: false
+          });
+          object = new THREE.Mesh(geometry, material);
+        }
 
         if (this.mesh) {
           this.scene.remove(this.mesh);
-          this.mesh.geometry.dispose();
-          this.mesh.material.dispose();
+          this.mesh.traverse((child) => {
+            if (child.isMesh) {
+              child.geometry.dispose();
+              const materials = Array.isArray(child.material) ? child.material : [child.material];
+              materials.forEach((m) => m?.dispose());
+            }
+          });
         }
 
-        const material = new THREE.MeshStandardMaterial({
-          color: 0x00d4aa,
-          metalness: 0.1,
-          roughness: 0.55,
-          flatShading: false
-        });
-        const mesh = new THREE.Mesh(geometry, material);
-
         // Centra o modelo sobre a mesa e assenta-o em Z=0
-        const bbox = geometry.boundingBox;
+        object.updateMatrixWorld(true);
+        const bbox = new THREE.Box3().setFromObject(object);
         const sizeX = bbox.max.x - bbox.min.x;
         const sizeY = bbox.max.y - bbox.min.y;
         const sizeZ = bbox.max.z - bbox.min.z;
 
-        mesh.rotation.x = -Math.PI / 2; // STL costuma vir com Z para cima -> Three usa Y para cima
-        mesh.position.set(
+        object.rotation.x = -Math.PI / 2; // STL/3MF costumam vir com Z para cima -> Three usa Y para cima
+        object.position.set(
           LK4_PRO_LIMITS.bedWidth / 2 - (bbox.min.x + sizeX / 2),
           -bbox.min.z,
           LK4_PRO_LIMITS.bedDepth / 2 + (bbox.min.y + sizeY / 2)
         );
 
-        this.scene.add(mesh);
-        this.mesh = mesh;
+        this.scene.add(object);
+        this.mesh = object;
 
         this._frame(sizeX, sizeZ, sizeY);
 

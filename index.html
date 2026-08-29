@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LK4 Pro Slicer</title>
+  <title>WebSlicer</title>
   <link rel="icon" href="data:,">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -18,7 +18,7 @@
           <path d="M12 3v4M12 17v4M3 12h4M17 12h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
         </svg>
         <div>
-          <h1>LK4 Pro Slicer</h1>
+          <h1>WebSlicer</h1>
           <span class="subtitle">CuraEngine no browser &middot; Longer LK4 Pro</span>
         </div>
       </div>
@@ -33,8 +33,8 @@
         <div id="viewport"></div>
         <div class="dropzone" id="dropzone">
           <svg viewBox="0 0 24 24" width="32" height="32" fill="none"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <p>Arrasta um <strong>.stl</strong> para aqui<br/>ou clica para escolher</p>
-          <input type="file" id="fileInput" accept=".stl" hidden />
+          <p>Arrasta um <strong>.stl</strong> ou <strong>.3mf</strong> para aqui<br/>ou clica para escolher</p>
+          <input type="file" id="fileInput" accept=".stl,.3mf" hidden />
         </div>
         <div class="model-info" id="modelInfo" hidden></div>
         <div class="corner-leveling" title="Nivelamento manual — 4 cantos">

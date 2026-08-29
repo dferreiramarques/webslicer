@@ -1,7 +1,7 @@
 {
-  "name": "lk4pro-slicer",
+  "name": "webslicer",
   "version": "1.0.0",
-  "description": "Slicer no browser (CuraEngine via WASM) para a Longer LK4 Pro, com envio direto para Mainsail/Klipper",
+  "description": "WebSlicer — slicer no browser (CuraEngine via WASM) para a Longer LK4 Pro, com envio direto para Mainsail/Klipper",
   "type": "module",
   "scripts": {
     "dev": "vite",
