@@ -1,7 +1,7 @@
 import './style.css';
 import { CuraWASM } from 'cura-wasm';
 import { Viewer } from './viewer.js';
-import { buildLk4ProDefinition, LK4_PRO_LIMITS, KLIPPER_MACRO_SENTINELS } from './lk4pro.definition.js';
+import { PRINTERS, DEFAULT_PRINTER_ID, KLIPPER_MACRO_SENTINELS } from './printers.js';
 
 // --- Elementos ---
 const el = (id) => document.getElementById(id);
@@ -24,6 +24,15 @@ const infillDensity = el('infillDensity');
 const infillDensityOut = el('infillDensityOut');
 const qualityPreset = el('qualityPreset');
 const layerHeightInput = el('layerHeight');
+const printerSelect = el('printerSelect');
+const saveProfileBtn = el('saveProfileBtn');
+const resetProfileBtn = el('resetProfileBtn');
+const materialHeading = el('materialHeading');
+const klipperMacrosGroup = el('klipperMacrosGroup');
+const printerSubtitle = el('printerSubtitle');
+const useKlipperMacrosCheckbox = el('useKlipperMacros');
+const printTempInput = el('printTemp');
+const bedTempInput = el('bedTemp');
 
 const QUALITY_PRESETS = {
   draft: 0.28,
@@ -31,17 +40,143 @@ const QUALITY_PRESETS = {
   fine: 0.12
 };
 
+const GLOBAL_DEFAULTS = {
+  wallThickness: 0.8,
+  infillDensity: 20,
+  infillPattern: 'cubic',
+  supportEnable: false,
+  adhesionType: 'skirt',
+  useKlipperMacros: false
+};
+
 let currentModel = null; // ArrayBuffer
 let currentModelExt = 'stl'; // 'stl' | '3mf'
 let currentGcode = null; // ArrayBuffer
 let currentGcodeName = 'model.gcode';
+let activePrinterId = localStorage.getItem('webslicer:lastPrinter') || DEFAULT_PRINTER_ID;
+if (!PRINTERS[activePrinterId]) activePrinterId = DEFAULT_PRINTER_ID;
+
+const getActivePrinter = () => PRINTERS[activePrinterId];
+const profileKey = (printerId) => `webslicer:profile:${printerId}`;
 
 // Guarda o host do Mainsail entre sessões (localStorage é só configuração local do browser, não é persistência de dados sensíveis)
 mainsailHost.value = localStorage.getItem('lk4pro:mainsailHost') || '';
 
 // --- Viewer 3D ---
 const viewport = document.getElementById('viewport');
-const viewer = new Viewer(viewport);
+const viewer = new Viewer(viewport, getActivePrinter().limits);
+
+// --- Seletor de impressora ---
+for (const printer of Object.values(PRINTERS)) {
+  const option = document.createElement('option');
+  option.value = printer.id;
+  option.textContent = printer.label;
+  printerSelect.appendChild(option);
+}
+printerSelect.value = activePrinterId;
+
+printerSelect.addEventListener('change', () => switchPrinter(printerSelect.value));
+
+function collectProfile() {
+  return {
+    qualityPreset: qualityPreset.value,
+    layerHeight: Number(layerHeightInput.value),
+    wallThickness: Number(el('wallThickness').value),
+    infillDensity: Number(infillDensity.value),
+    infillPattern: el('infillPattern').value,
+    printTemp: Number(printTempInput.value),
+    bedTemp: Number(bedTempInput.value),
+    printSpeed: Number(el('printSpeed').value),
+    supportEnable: el('supportEnable').checked,
+    adhesionType: el('adhesionType').value,
+    useKlipperMacros: useKlipperMacrosCheckbox.checked
+  };
+}
+
+function applyProfile(profile) {
+  layerHeightInput.value = profile.layerHeight;
+  qualityPreset.value = profile.qualityPreset ?? matchQualityPreset(profile.layerHeight);
+  el('wallThickness').value = profile.wallThickness;
+  infillDensity.value = profile.infillDensity;
+  infillDensityOut.textContent = `${profile.infillDensity}%`;
+  el('infillPattern').value = profile.infillPattern;
+  printTempInput.value = profile.printTemp;
+  bedTempInput.value = profile.bedTemp;
+  el('printSpeed').value = profile.printSpeed;
+  el('supportEnable').checked = profile.supportEnable;
+  el('adhesionType').value = profile.adhesionType;
+  useKlipperMacrosCheckbox.checked = profile.useKlipperMacros;
+}
+
+function matchQualityPreset(layerHeight) {
+  const match = Object.entries(QUALITY_PRESETS).find(([, value]) => value === layerHeight);
+  return match ? match[0] : 'custom';
+}
+
+function defaultProfileFor(printer) {
+  return {
+    qualityPreset: matchQualityPreset(printer.defaults.layerHeight),
+    layerHeight: printer.defaults.layerHeight,
+    printTemp: printer.defaults.printTemp,
+    bedTemp: printer.defaults.bedTemp,
+    printSpeed: printer.defaults.printSpeed,
+    ...GLOBAL_DEFAULTS
+  };
+}
+
+/** Aplica o perfil guardado da impressora, ou as predefinições se não houver nenhum. */
+function loadProfileForActivePrinter() {
+  const printer = getActivePrinter();
+  const saved = localStorage.getItem(profileKey(printer.id));
+  const profile = saved ? { ...defaultProfileFor(printer), ...JSON.parse(saved) } : defaultProfileFor(printer);
+  applyProfile(profile);
+}
+
+/** Troca de impressora ativa: limites, mesa 3D, motor e perfil guardado. */
+function switchPrinter(printerId) {
+  if (!PRINTERS[printerId]) return;
+  activePrinterId = printerId;
+  localStorage.setItem('webslicer:lastPrinter', printerId);
+
+  const printer = getActivePrinter();
+  printerSelect.value = printer.id;
+  printerSubtitle.textContent = printer.label;
+  materialHeading.textContent = `Material — ${printer.label} (máx. ${printer.limits.maxNozzleTemp}°C bico / ${printer.limits.maxBedTemp}°C cama)`;
+  printTempInput.max = printer.limits.maxNozzleTemp;
+  bedTempInput.max = printer.limits.maxBedTemp;
+  klipperMacrosGroup.hidden = !printer.supportsKlipperMacros;
+
+  loadProfileForActivePrinter();
+
+  // A definição da impressora está embutida no motor — troca de impressora obriga a recriar
+  slicer = null;
+  slicerKey = null;
+
+  // As posições/limites do modelo carregado eram relativos à mesa anterior
+  viewer.clearModel();
+  viewer.setLimits(printer.limits);
+  currentModel = null;
+  currentGcode = null;
+  dropzone.classList.remove('hidden');
+  modelInfo.hidden = true;
+  resultRow.hidden = true;
+  sliceBtn.disabled = true;
+
+  setStatus(`Impressora: ${printer.label}. Carrega um modelo STL ou 3MF para começar.`);
+}
+
+saveProfileBtn.addEventListener('click', () => {
+  const printer = getActivePrinter();
+  localStorage.setItem(profileKey(printer.id), JSON.stringify(collectProfile()));
+  setStatus(`Perfil da ${printer.label} guardado para uso futuro.`);
+});
+
+resetProfileBtn.addEventListener('click', () => {
+  const printer = getActivePrinter();
+  localStorage.removeItem(profileKey(printer.id));
+  applyProfile(defaultProfileFor(printer));
+  setStatus(`Definições da ${printer.label} repostas para as predefinições.`);
+});
 
 // --- Drag & drop / seleção de ficheiro ---
 dropzone.addEventListener('click', () => fileInput.click());
@@ -77,8 +212,9 @@ async function handleFile(file) {
     modelInfo.hidden = false;
     modelInfo.innerHTML = `<strong>${file.name}</strong><br/>${dims.x.toFixed(1)} × ${dims.y.toFixed(1)} × ${dims.z.toFixed(1)} mm`;
 
-    if (dims.x > LK4_PRO_LIMITS.bedWidth || dims.y > LK4_PRO_LIMITS.bedDepth || dims.z > LK4_PRO_LIMITS.maxHeight) {
-      setStatus('Atenção: o modelo excede o volume de impressão da LK4 Pro (220×220×250mm).', true);
+    const limits = getActivePrinter().limits;
+    if (dims.x > limits.bedWidth || dims.y > limits.bedDepth || dims.z > limits.maxHeight) {
+      setStatus(`Atenção: o modelo excede o volume de impressão da ${getActivePrinter().label} (${limits.bedWidth}×${limits.bedDepth}×${limits.maxHeight}mm).`, true);
     } else {
       setStatus('Modelo carregado. Ajusta as definições e fatia.');
     }
@@ -103,18 +239,19 @@ infillDensity.addEventListener('input', () => { infillDensityOut.textContent = `
 
 // --- Motor CuraEngine (WASM) ---
 let slicer = null;
-let slicerKlipperMode = null;
+let slicerKey = null;
 
-function getSlicer(useKlipperMacros) {
-  // Recria o slicer só se o modo de G-code mudou (a definição da impressora está embutida no slicer)
-  if (slicer == null || slicerKlipperMode !== useKlipperMacros) {
+function getSlicer(printerId, useKlipperMacros) {
+  const key = `${printerId}:${useKlipperMacros}`;
+  // Recria o slicer só se a impressora ou o modo de G-code mudou (a definição está embutida no slicer)
+  if (slicer == null || slicerKey !== key) {
     setEngineStatus('idle', 'motor por iniciar');
     slicer = new CuraWASM({
-      definition: buildLk4ProDefinition(useKlipperMacros),
+      definition: PRINTERS[printerId].buildDefinition(useKlipperMacros),
       overrides: [],
       verbose: false
     });
-    slicerKlipperMode = useKlipperMacros;
+    slicerKey = key;
   }
   return slicer;
 }
@@ -132,10 +269,10 @@ function buildOverrides() {
   add('adhesion_type', `'${el('adhesionType').value}'`);
 
   // Temperaturas — aplicadas ao material do extruder 0
-  add('material_print_temperature', Number(el('printTemp').value), 'e0');
-  add('material_print_temperature_layer_0', Number(el('printTemp').value) + 5, 'e0');
-  add('material_bed_temperature', Number(el('bedTemp').value));
-  add('material_bed_temperature_layer_0', Number(el('bedTemp').value) + 5);
+  add('material_print_temperature', Number(printTempInput.value), 'e0');
+  add('material_print_temperature_layer_0', Number(printTempInput.value) + 5, 'e0');
+  add('material_bed_temperature', Number(bedTempInput.value));
+  add('material_bed_temperature_layer_0', Number(bedTempInput.value) + 5);
 
   return overrides;
 }
@@ -156,10 +293,11 @@ function substituteKlipperMacroTemps(gcode, printTemp, bedTemp) {
 sliceBtn.addEventListener('click', async () => {
   if (!currentModel) return;
 
-  const printTemp = Number(el('printTemp').value);
-  const bedTemp = Number(el('bedTemp').value);
-  if (printTemp > LK4_PRO_LIMITS.maxNozzleTemp || bedTemp > LK4_PRO_LIMITS.maxBedTemp) {
-    setStatus(`Temperaturas acima do limite da LK4 Pro (bico ≤ ${LK4_PRO_LIMITS.maxNozzleTemp}°C, cama ≤ ${LK4_PRO_LIMITS.maxBedTemp}°C).`, true);
+  const printer = getActivePrinter();
+  const printTemp = Number(printTempInput.value);
+  const bedTemp = Number(bedTempInput.value);
+  if (printTemp > printer.limits.maxNozzleTemp || bedTemp > printer.limits.maxBedTemp) {
+    setStatus(`Temperaturas acima do limite da ${printer.label} (bico ≤ ${printer.limits.maxNozzleTemp}°C, cama ≤ ${printer.limits.maxBedTemp}°C).`, true);
     return;
   }
 
@@ -172,8 +310,8 @@ sliceBtn.addEventListener('click', async () => {
   setStatus('A fatiar — a primeira vez demora mais tempo (carrega o WASM).');
 
   try {
-    const useKlipperMacros = el('useKlipperMacros').checked;
-    const engine = getSlicer(useKlipperMacros);
+    const useKlipperMacros = printer.supportsKlipperMacros && useKlipperMacrosCheckbox.checked;
+    const engine = getSlicer(printer.id, useKlipperMacros);
     engine.removeAllListeners('progress');
     engine.on('progress', (p) => {
       progressFill.style.width = `${p}%`;
@@ -277,3 +415,15 @@ function formatDuration(totalMinutes) {
   const m = totalMinutes % 60;
   return h > 0 ? `${h}h ${m}min` : `${m}min`;
 }
+
+// --- Inicialização ---
+(function init() {
+  const printer = getActivePrinter();
+  printerSubtitle.textContent = printer.label;
+  materialHeading.textContent = `Material — ${printer.label} (máx. ${printer.limits.maxNozzleTemp}°C bico / ${printer.limits.maxBedTemp}°C cama)`;
+  printTempInput.max = printer.limits.maxNozzleTemp;
+  bedTempInput.max = printer.limits.maxBedTemp;
+  klipperMacrosGroup.hidden = !printer.supportsKlipperMacros;
+  loadProfileForActivePrinter();
+  setStatus(`Impressora: ${printer.label}. Carrega um modelo STL ou 3MF para começar.`);
+})();

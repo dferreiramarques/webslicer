@@ -3,18 +3,18 @@ import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { LK4_PRO_LIMITS } from './lk4pro.definition.js';
 import { mergeThreeMFParts } from './threemf-parts.js';
 
 export class Viewer {
-  constructor(container) {
+  constructor(container, limits) {
     this.container = container;
+    this.limits = limits;
     this.scene = new THREE.Scene();
     this.scene.background = null;
 
     const { clientWidth: w, clientHeight: h } = container;
-    this.camera = new THREE.PerspectiveCamera(45, w / h, 1, 2000);
-    this.camera.position.set(220, 260, 320);
+    this.camera = new THREE.PerspectiveCamera(45, w / h, 1, 4000);
+    this.camera.position.set(limits.bedWidth, limits.bedWidth * 1.2, limits.bedDepth * 1.4);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -22,10 +22,11 @@ export class Viewer {
     container.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.target.set(LK4_PRO_LIMITS.bedWidth / 2, 0, LK4_PRO_LIMITS.bedDepth / 2);
+    this.controls.target.set(limits.bedWidth / 2, 0, limits.bedDepth / 2);
     this.controls.update();
 
     this._buildLights();
+    this.bedGroup = null;
     this._buildBed();
     this.mesh = null;
 
@@ -41,23 +42,60 @@ export class Viewer {
   }
 
   _buildBed() {
-    const { bedWidth, bedDepth } = LK4_PRO_LIMITS;
+    const { bedWidth, bedDepth } = this.limits;
+    const group = new THREE.Group();
+
     const grid = new THREE.GridHelper(Math.max(bedWidth, bedDepth), 22, 0x2a2f35, 0x1f2327);
     grid.position.set(bedWidth / 2, 0, bedDepth / 2);
-    this.scene.add(grid);
+    group.add(grid);
 
     const plateGeo = new THREE.PlaneGeometry(bedWidth, bedDepth);
     const plateMat = new THREE.MeshBasicMaterial({ color: 0x0f1113, transparent: true, opacity: 0.5 });
     const plate = new THREE.Mesh(plateGeo, plateMat);
     plate.rotation.x = -Math.PI / 2;
     plate.position.set(bedWidth / 2, -0.05, bedDepth / 2);
-    this.scene.add(plate);
+    group.add(plate);
 
     const edges = new THREE.EdgesGeometry(plateGeo);
     const outline = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x00d4aa, transparent: true, opacity: 0.5 }));
     outline.rotation.x = -Math.PI / 2;
     outline.position.set(bedWidth / 2, 0, bedDepth / 2);
-    this.scene.add(outline);
+    group.add(outline);
+
+    this.scene.add(group);
+    this.bedGroup = group;
+  }
+
+  /** Troca de impressora: recria a mesa/grelha para o novo volume de impressão. */
+  setLimits(limits) {
+    this.limits = limits;
+
+    this.scene.remove(this.bedGroup);
+    this.bedGroup.traverse((child) => {
+      if (child.isMesh || child.isLineSegments) {
+        child.geometry.dispose();
+        child.material.dispose();
+      }
+    });
+    this._buildBed();
+
+    this.controls.target.set(limits.bedWidth / 2, 0, limits.bedDepth / 2);
+    this.camera.position.set(limits.bedWidth, limits.bedWidth * 1.2, limits.bedDepth * 1.4);
+    this.controls.update();
+  }
+
+  /** Remove o modelo atualmente carregado (ex: ao trocar de impressora). */
+  clearModel() {
+    if (!this.mesh) return;
+    this.scene.remove(this.mesh);
+    this.mesh.traverse((child) => {
+      if (child.isMesh) {
+        child.geometry.dispose();
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((m) => m?.dispose());
+      }
+    });
+    this.mesh = null;
   }
 
   loadModel(arrayBuffer, extension) {
@@ -93,16 +131,7 @@ export class Viewer {
           object = new THREE.Mesh(geometry, material);
         }
 
-        if (this.mesh) {
-          this.scene.remove(this.mesh);
-          this.mesh.traverse((child) => {
-            if (child.isMesh) {
-              child.geometry.dispose();
-              const materials = Array.isArray(child.material) ? child.material : [child.material];
-              materials.forEach((m) => m?.dispose());
-            }
-          });
-        }
+        this.clearModel();
 
         // Centra o modelo sobre a mesa e assenta-o em Z=0
         object.updateMatrixWorld(true);
@@ -113,9 +142,9 @@ export class Viewer {
 
         object.rotation.x = -Math.PI / 2; // STL/3MF costumam vir com Z para cima -> Three usa Y para cima
         object.position.set(
-          LK4_PRO_LIMITS.bedWidth / 2 - (bbox.min.x + sizeX / 2),
+          this.limits.bedWidth / 2 - (bbox.min.x + sizeX / 2),
           -bbox.min.z,
-          LK4_PRO_LIMITS.bedDepth / 2 + (bbox.min.y + sizeY / 2)
+          this.limits.bedDepth / 2 + (bbox.min.y + sizeY / 2)
         );
 
         this.scene.add(object);
@@ -134,9 +163,9 @@ export class Viewer {
     const maxDim = Math.max(sizeX, sizeY, sizeZ, 60);
     const dist = maxDim * 2.2;
     this.camera.position.set(
-      LK4_PRO_LIMITS.bedWidth / 2 + dist * 0.6,
+      this.limits.bedWidth / 2 + dist * 0.6,
       dist * 0.55,
-      LK4_PRO_LIMITS.bedDepth / 2 + dist * 0.6
+      this.limits.bedDepth / 2 + dist * 0.6
     );
     this.controls.update();
   }

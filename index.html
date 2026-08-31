@@ -19,7 +19,7 @@
         </svg>
         <div>
           <h1>WebSlicer</h1>
-          <span class="subtitle">CuraEngine no browser &middot; Longer LK4 Pro</span>
+          <span class="subtitle">CuraEngine no browser &middot; <span id="printerSubtitle">Longer LK4 Pro</span></span>
         </div>
       </div>
       <div class="engine-status" id="engineStatus">
@@ -44,6 +44,18 @@
 
       <aside class="panel">
         <div class="panel-scroll">
+          <section class="group">
+            <h2>Impressora</h2>
+            <label class="field">
+              <span>Modelo</span>
+              <select id="printerSelect"></select>
+            </label>
+            <div class="result-actions">
+              <button id="saveProfileBtn" class="secondary" type="button">Guardar perfil</button>
+              <button id="resetProfileBtn" class="secondary" type="button">Repor predefinições</button>
+            </div>
+          </section>
+
           <section class="group">
             <h2>Qualidade</h2>
             <label class="field">
@@ -85,7 +97,7 @@
           </section>
 
           <section class="group">
-            <h2>Material — LK4 Pro (máx. 250°C bico / 100°C cama)</h2>
+            <h2 id="materialHeading">Material</h2>
             <label class="field">
               <span>Temp. bico (°C)</span>
               <input type="number" id="printTemp" min="150" max="250" value="200" />
@@ -117,7 +129,7 @@
             </label>
           </section>
 
-          <section class="group">
+          <section class="group" id="klipperMacrosGroup">
             <h2>G-code inicial/final</h2>
             <label class="field checkbox">
               <input type="checkbox" id="useKlipperMacros" />

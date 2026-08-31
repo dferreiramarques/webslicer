@@ -1,6 +1,6 @@
 # WebSlicer
 
-Slicer 100% no browser para a **Longer LK4 Pro**, construído sobre o
+Slicer 100% no browser, construído sobre o
 [CuraEngine](https://github.com/Ultimaker/CuraEngine) real, compilado para
 WebAssembly via [`cura-wasm`](https://github.com/Cloud-CNC/cura-wasm) (o
 mesmo motor da Cura desktop). Nada é enviado para nenhum servidor — o
@@ -10,13 +10,18 @@ fatiamento corre inteiramente no teu computador/telemóvel.
 
 - Sem instalação — abre um separador e fatia.
 - Aceita ficheiros **.stl** e **.3mf**.
-- Definição de impressora feita à medida da LK4 Pro (220×220×250mm, bico
-  0.4mm, cama até 100°C, bico até 250°C, sem ABL).
+- Três perfis de impressora prontos a usar: **Longer LK4 Pro**, **Prusa i3
+  MK3S** e **Creality CR-X** (bico único) — todas Marlin/Klipper. Muda de
+  impressora no painel lateral; a mesa e os limites de temperatura ajustam-se
+  automaticamente.
+- Perfis personalizados: ajusta as definições e carrega em **Guardar perfil**
+  para as reteres por impressora entre sessões (guardado no browser). **Repor
+  predefinições** volta aos valores de fábrica dessa impressora.
 - Preview 3D do modelo sobre a mesa (three.js).
-- Envio direto do G-code para o teu **Mainsail/Moonraker** (a IP `192.168.1.222`
-  do Pi que já tens configurado) — sem passar por pen/SD.
-- Opção de trocar o G-code inicial/final para as macros `PRINT_START` /
-  `PRINT_END` do Klipper, se as tiveres no `printer.cfg`.
+- Envio direto do G-code para o teu **Mainsail/Moonraker** — sem passar por
+  pen/SD.
+- Na LK4 Pro, opção de trocar o G-code inicial/final para as macros
+  `PRINT_START` / `PRINT_END` do Klipper, se as tiveres no `printer.cfg`.
 
 ## Correr localmente
 
@@ -65,14 +70,20 @@ cors_domains:
     http://localhost:5173
 ```
 
-## Ajustar a definição da impressora
+## Ajustar as definições de impressora / adicionar uma nova
 
-`src/lk4pro.definition.js` tem todos os valores específicos da LK4 Pro
-(dimensões, G-code inicial/final, limites de temperatura). Está construída
-por cima do perfil `creality_base` já incluído na `cura-wasm-definitions`
-(mesma família Bowden + cama de vidro), com overrides para os valores reais
-da LK4 Pro. Se mudares alguma peça do hardware (ex: hotend all-metal,
-extrusora direct drive), é aqui que ajustas.
+`src/printers.js` tem o registo `PRINTERS` com os três perfis (LK4 Pro, Prusa
+i3 MK3S, Creality CR-X): dimensões, G-code inicial/final, limites de
+temperatura e valores por omissão. Cada uma está construída por cima de um
+perfil já incluído na `cura-wasm-definitions`, com overrides para os valores
+reais do hardware. Para adicionar outra impressora, segue o padrão de uma das
+existentes e acrescenta uma entrada a `PRINTERS`.
+
+**Nota importante para quem editar G-code inicial/final aqui:** o CuraEngine
+compilado para WASM nunca resolve placeholders `{setting}` dentro do G-code
+(essa substituição só existe na app Python do Cura desktop) — usa valores
+fixos ou os comandos M104/M109/M140/M190 que o próprio motor insere
+automaticamente antes do G-code inicial.
 
 ## Stack
 
