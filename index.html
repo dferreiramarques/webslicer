@@ -45,7 +45,7 @@
       <aside class="panel">
         <div class="panel-scroll">
           <section class="group">
-            <h2>Impressora</h2>
+            <h2>1. Impressora</h2>
             <label class="field">
               <span>Modelo</span>
               <select id="printerSelect"></select>
@@ -55,6 +55,48 @@
               <button id="resetProfileBtn" class="secondary" type="button">Repor predefinições</button>
             </div>
           </section>
+
+          <section class="group">
+            <h2>2. Ligação</h2>
+            <label class="field">
+              <span>Tipo</span>
+              <select id="connectionType">
+                <option value="ip">IP / Rede (Mainsail-Moonraker)</option>
+                <option value="usb">USB (porta série)</option>
+              </select>
+            </label>
+            <p class="hint" id="connectionHint"></p>
+
+            <div id="ipConnectionPanel">
+              <label class="field small">
+                <span>IP / host do Mainsail</span>
+                <input type="text" id="mainsailHost" placeholder="192.168.1.222" />
+              </label>
+            </div>
+
+            <div id="usbConnectionPanel" hidden>
+              <label class="field small">
+                <span>Baud rate</span>
+                <select id="usbBaudRate">
+                  <option value="115200" selected>115200</option>
+                  <option value="250000">250000</option>
+                </select>
+              </label>
+              <div class="result-actions">
+                <button id="usbConnectBtn" type="button" class="secondary">Ligar por USB</button>
+                <button id="usbDisconnectBtn" type="button" class="secondary" hidden>Desligar</button>
+              </div>
+              <p class="hint" id="usbStatus">Não ligado.</p>
+            </div>
+          </section>
+
+          <section class="group">
+            <h2>3. Ficheiro</h2>
+            <p class="hint" id="fileInfoHint">Nenhum ficheiro carregado.</p>
+            <button id="chooseFileBtn" type="button" class="secondary">Escolher ficheiro…</button>
+          </section>
+
+          <div class="step-divider">4. Definições de impressão</div>
 
           <section class="group">
             <h2>Qualidade</h2>
@@ -140,6 +182,7 @@
         </div>
 
         <div class="panel-footer">
+          <div class="footer-label">5. Imprimir</div>
           <button id="sliceBtn" class="primary" disabled>Fatiar</button>
           <div class="progress-row" id="progressRow" hidden>
             <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
@@ -149,12 +192,14 @@
             <div class="result-stats" id="resultStats"></div>
             <div class="result-actions">
               <button id="downloadBtn" class="secondary">Descarregar .gcode</button>
-              <button id="sendMainsailBtn" class="secondary">Enviar para Mainsail</button>
+              <button id="sendMainsailBtn" class="secondary" hidden>Enviar para Mainsail</button>
+              <button id="usbPrintBtn" class="secondary" hidden>Imprimir por USB</button>
             </div>
-            <label class="field small">
-              <span>IP / host do Mainsail</span>
-              <input type="text" id="mainsailHost" placeholder="192.168.1.222" />
-            </label>
+            <div class="progress-row" id="usbPrintProgressRow" hidden>
+              <div class="progress-bar"><div class="progress-fill" id="usbPrintProgressFill"></div></div>
+              <span id="usbPrintProgressLabel">0%</span>
+            </div>
+            <button id="usbCancelPrintBtn" class="secondary" hidden>Cancelar impressão</button>
           </div>
         </div>
       </aside>

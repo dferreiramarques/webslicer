@@ -2,6 +2,7 @@ import './style.css';
 import { CuraWASM } from 'cura-wasm';
 import { Viewer } from './viewer.js';
 import { PRINTERS, DEFAULT_PRINTER_ID, KLIPPER_MACRO_SENTINELS } from './printers.js';
+import { SerialPrinter, isSerialSupported } from './serial-printer.js';
 
 // --- Elementos ---
 const el = (id) => document.getElementById(id);
@@ -33,6 +34,21 @@ const printerSubtitle = el('printerSubtitle');
 const useKlipperMacrosCheckbox = el('useKlipperMacros');
 const printTempInput = el('printTemp');
 const bedTempInput = el('bedTemp');
+const connectionType = el('connectionType');
+const connectionHint = el('connectionHint');
+const ipConnectionPanel = el('ipConnectionPanel');
+const usbConnectionPanel = el('usbConnectionPanel');
+const usbBaudRate = el('usbBaudRate');
+const usbConnectBtn = el('usbConnectBtn');
+const usbDisconnectBtn = el('usbDisconnectBtn');
+const usbStatus = el('usbStatus');
+const chooseFileBtn = el('chooseFileBtn');
+const fileInfoHint = el('fileInfoHint');
+const usbPrintBtn = el('usbPrintBtn');
+const usbCancelPrintBtn = el('usbCancelPrintBtn');
+const usbPrintProgressRow = el('usbPrintProgressRow');
+const usbPrintProgressFill = el('usbPrintProgressFill');
+const usbPrintProgressLabel = el('usbPrintProgressLabel');
 
 const QUALITY_PRESETS = {
   draft: 0.28,
@@ -58,9 +74,11 @@ if (!PRINTERS[activePrinterId]) activePrinterId = DEFAULT_PRINTER_ID;
 
 const getActivePrinter = () => PRINTERS[activePrinterId];
 const profileKey = (printerId) => `webslicer:profile:${printerId}`;
+const serialPrinter = new SerialPrinter();
 
 // Guarda o host do Mainsail entre sessões (localStorage é só configuração local do browser, não é persistência de dados sensíveis)
 mainsailHost.value = localStorage.getItem('lk4pro:mainsailHost') || '';
+usbBaudRate.value = localStorage.getItem('webslicer:usbBaudRate') || '115200';
 
 // --- Viewer 3D ---
 const viewport = document.getElementById('viewport');
@@ -132,7 +150,87 @@ function loadProfileForActivePrinter() {
   applyProfile(profile);
 }
 
-/** Troca de impressora ativa: limites, mesa 3D, motor e perfil guardado. */
+// --- Ligação (IP / USB) ---
+// Cada impressora só aceita uma via: Klipper fala Moonraker/Mainsail em
+// rede, Marlin aceita G-code diretamente por USB. O seletor mostra as duas
+// opções mas bloqueia a que não se aplica à impressora escolhida.
+function updateConnectionUI(printer) {
+  connectionType.value = printer.connection;
+  for (const option of connectionType.options) {
+    option.disabled = option.value !== printer.connection;
+  }
+  ipConnectionPanel.hidden = printer.connection !== 'ip';
+  usbConnectionPanel.hidden = printer.connection !== 'usb';
+  connectionHint.textContent = printer.connection === 'ip'
+    ? `A ${printer.label} corre Klipper — liga-se em rede via Moonraker/Mainsail.`
+    : `A ${printer.label} corre Marlin — liga-se diretamente por USB (Web Serial).`;
+  updatePrintActionVisibility();
+}
+
+function updatePrintActionVisibility() {
+  const printer = getActivePrinter();
+  sendMainsailBtn.hidden = printer.connection !== 'ip';
+  usbPrintBtn.hidden = printer.connection !== 'usb';
+  usbPrintBtn.disabled = !serialPrinter.connected || !currentGcode;
+}
+
+if (!isSerialSupported()) {
+  usbConnectBtn.disabled = true;
+  usbStatus.textContent = 'O teu browser não suporta ligação USB direta (Web Serial). Usa Chrome ou Edge.';
+}
+
+usbConnectBtn.addEventListener('click', async () => {
+  usbConnectBtn.disabled = true;
+  usbStatus.textContent = 'A ligar…';
+  try {
+    const baudRate = Number(usbBaudRate.value);
+    await serialPrinter.connect(baudRate);
+    localStorage.setItem('webslicer:usbBaudRate', usbBaudRate.value);
+    onUsbConnected();
+  } catch (err) {
+    console.error(err);
+    usbStatus.textContent = `Falha ao ligar: ${err.message}`;
+    usbConnectBtn.disabled = false;
+  }
+});
+
+usbDisconnectBtn.addEventListener('click', async () => {
+  usbDisconnectBtn.disabled = true;
+  await serialPrinter.disconnect();
+  onUsbDisconnected();
+});
+
+function onUsbConnected() {
+  usbConnectBtn.hidden = true;
+  usbDisconnectBtn.hidden = false;
+  usbDisconnectBtn.disabled = false;
+  usbBaudRate.disabled = true;
+  usbStatus.textContent = 'Ligado.';
+  updatePrintActionVisibility();
+}
+
+function onUsbDisconnected() {
+  usbConnectBtn.hidden = false;
+  usbConnectBtn.disabled = !isSerialSupported();
+  usbDisconnectBtn.hidden = true;
+  usbBaudRate.disabled = false;
+  usbStatus.textContent = 'Não ligado.';
+  usbPrintProgressRow.hidden = true;
+  usbCancelPrintBtn.hidden = true;
+  updatePrintActionVisibility();
+}
+
+if (isSerialSupported()) {
+  navigator.serial.addEventListener('disconnect', () => {
+    if (serialPrinter.connected) {
+      serialPrinter.disconnect();
+      onUsbDisconnected();
+      setStatus('A impressora USB foi desligada inesperadamente.', true);
+    }
+  });
+}
+
+/** Troca de impressora ativa: limites, mesa 3D, ligação, motor e perfil guardado. */
 function switchPrinter(printerId) {
   if (!PRINTERS[printerId]) return;
   activePrinterId = printerId;
@@ -144,7 +242,14 @@ function switchPrinter(printerId) {
   materialHeading.textContent = `Material — ${printer.label} (máx. ${printer.limits.maxNozzleTemp}°C bico / ${printer.limits.maxBedTemp}°C cama)`;
   printTempInput.max = printer.limits.maxNozzleTemp;
   bedTempInput.max = printer.limits.maxBedTemp;
-  klipperMacrosGroup.hidden = !printer.supportsKlipperMacros;
+  klipperMacrosGroup.hidden = printer.firmware !== 'klipper';
+
+  updateConnectionUI(printer);
+  // A porta USB liga a um dispositivo físico específico — trocar de perfil
+  // de impressora não significa que seja o mesmo cabo/porta.
+  if (serialPrinter.connected) {
+    serialPrinter.disconnect().then(onUsbDisconnected);
+  }
 
   loadProfileForActivePrinter();
 
@@ -159,6 +264,7 @@ function switchPrinter(printerId) {
   currentGcode = null;
   dropzone.classList.remove('hidden');
   modelInfo.hidden = true;
+  fileInfoHint.textContent = 'Nenhum ficheiro carregado.';
   resultRow.hidden = true;
   sliceBtn.disabled = true;
 
@@ -180,6 +286,7 @@ resetProfileBtn.addEventListener('click', () => {
 
 // --- Drag & drop / seleção de ficheiro ---
 dropzone.addEventListener('click', () => fileInput.click());
+chooseFileBtn.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
 dropzone.addEventListener('drop', (e) => {
@@ -210,7 +317,9 @@ async function handleFile(file) {
     currentModelExt = dims.sliceExt;
     dropzone.classList.add('hidden');
     modelInfo.hidden = false;
-    modelInfo.innerHTML = `<strong>${file.name}</strong><br/>${dims.x.toFixed(1)} × ${dims.y.toFixed(1)} × ${dims.z.toFixed(1)} mm`;
+    const dimsText = `${dims.x.toFixed(1)} × ${dims.y.toFixed(1)} × ${dims.z.toFixed(1)} mm`;
+    modelInfo.innerHTML = `<strong>${file.name}</strong><br/>${dimsText}`;
+    fileInfoHint.innerHTML = `<strong>${file.name}</strong><br/>${dimsText}`;
 
     const limits = getActivePrinter().limits;
     if (dims.x > limits.bedWidth || dims.y > limits.bedDepth || dims.z > limits.maxHeight) {
@@ -310,7 +419,7 @@ sliceBtn.addEventListener('click', async () => {
   setStatus('A fatiar — a primeira vez demora mais tempo (carrega o WASM).');
 
   try {
-    const useKlipperMacros = printer.supportsKlipperMacros && useKlipperMacrosCheckbox.checked;
+    const useKlipperMacros = printer.firmware === 'klipper' && useKlipperMacrosCheckbox.checked;
     const engine = getSlicer(printer.id, useKlipperMacros);
     engine.removeAllListeners('progress');
     engine.on('progress', (p) => {
@@ -327,6 +436,7 @@ sliceBtn.addEventListener('click', async () => {
     setEngineStatus('ready', 'motor pronto');
     progressRow.hidden = true;
     resultRow.hidden = false;
+    updatePrintActionVisibility();
 
     const timeMin = metadata ? Math.round(metadata.printTime / 60) : null;
     const filamentM = metadata ? (metadata.filamentUsage / 1000).toFixed(2) : null;
@@ -399,6 +509,47 @@ sendMainsailBtn.addEventListener('click', async () => {
   }
 });
 
+// --- Impressão direta por USB ---
+usbPrintBtn.addEventListener('click', async () => {
+  if (!currentGcode || !serialPrinter.connected) return;
+
+  usbPrintBtn.disabled = true;
+  usbCancelPrintBtn.hidden = false;
+  usbCancelPrintBtn.disabled = false;
+  usbPrintProgressRow.hidden = false;
+  usbPrintProgressFill.style.width = '0%';
+  usbPrintProgressLabel.textContent = '0%';
+  setStatus(`A imprimir ${currentGcodeName} por USB…`);
+
+  const text = new TextDecoder().decode(currentGcode);
+  try {
+    await serialPrinter.printGcode(text, {
+      onProgress: (done, total) => {
+        const pct = Math.round((done / total) * 100);
+        usbPrintProgressFill.style.width = `${pct}%`;
+        usbPrintProgressLabel.textContent = `${pct}%`;
+      }
+    });
+    setStatus(
+      serialPrinter.cancelled
+        ? 'Impressão cancelada — aquecedores desligados.'
+        : `Impressão de ${currentGcodeName} enviada por completo.`
+    );
+  } catch (err) {
+    console.error(err);
+    setStatus(`Erro durante a impressão por USB: ${err.message}`, true);
+  } finally {
+    usbPrintBtn.disabled = !serialPrinter.connected;
+    usbCancelPrintBtn.hidden = true;
+  }
+});
+
+usbCancelPrintBtn.addEventListener('click', async () => {
+  usbCancelPrintBtn.disabled = true;
+  await serialPrinter.cancelPrint();
+  setStatus('A cancelar impressão — aquecedores desligados. Comandos já enviados continuam a executar no firmware.', true);
+});
+
 // --- Utilitários de UI ---
 function setStatus(msg, isError = false) {
   statusMessage.textContent = msg;
@@ -417,13 +568,24 @@ function formatDuration(totalMinutes) {
 }
 
 // --- Inicialização ---
-(function init() {
+(async function init() {
   const printer = getActivePrinter();
   printerSubtitle.textContent = printer.label;
   materialHeading.textContent = `Material — ${printer.label} (máx. ${printer.limits.maxNozzleTemp}°C bico / ${printer.limits.maxBedTemp}°C cama)`;
   printTempInput.max = printer.limits.maxNozzleTemp;
   bedTempInput.max = printer.limits.maxBedTemp;
-  klipperMacrosGroup.hidden = !printer.supportsKlipperMacros;
+  klipperMacrosGroup.hidden = printer.firmware !== 'klipper';
+  updateConnectionUI(printer);
   loadProfileForActivePrinter();
   setStatus(`Impressora: ${printer.label}. Carrega um modelo STL ou 3MF para começar.`);
+
+  // Tenta religar a uma porta USB já autorizada nesta origem, sem novo popup
+  if (printer.connection === 'usb' && isSerialSupported()) {
+    try {
+      const reconnected = await serialPrinter.reconnectIfAuthorized(Number(usbBaudRate.value));
+      if (reconnected) onUsbConnected();
+    } catch (err) {
+      console.error(err);
+    }
+  }
 })();

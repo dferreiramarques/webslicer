@@ -230,7 +230,10 @@ export const PRINTERS = {
   lk4pro: {
     id: 'lk4pro',
     label: 'Longer LK4 Pro',
-    supportsKlipperMacros: true,
+    // Klipper só fala com o Moonraker/Mainsail em rede — o seu USB não
+    // aceita G-code Marlin diretamente como uma placa Marlin normal.
+    firmware: 'klipper',
+    connection: 'ip',
     limits: {
       bedWidth: 220,
       bedDepth: 220,
@@ -246,7 +249,8 @@ export const PRINTERS = {
   prusa_mk3s: {
     id: 'prusa_mk3s',
     label: 'Prusa i3 MK3S',
-    supportsKlipperMacros: false,
+    firmware: 'marlin',
+    connection: 'usb',
     limits: {
       bedWidth: 250,
       bedDepth: 210,
@@ -262,7 +266,8 @@ export const PRINTERS = {
   cr_x: {
     id: 'cr_x',
     label: 'Creality CR-X (bico único)',
-    supportsKlipperMacros: false,
+    firmware: 'marlin',
+    connection: 'usb',
     limits: {
       bedWidth: 300,
       bedDepth: 300,

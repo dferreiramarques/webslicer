@@ -18,8 +18,10 @@ fatiamento corre inteiramente no teu computador/telemóvel.
   para as reteres por impressora entre sessões (guardado no browser). **Repor
   predefinições** volta aos valores de fábrica dessa impressora.
 - Preview 3D do modelo sobre a mesa (three.js).
-- Envio direto do G-code para o teu **Mainsail/Moonraker** — sem passar por
-  pen/SD.
+- Ligação direta à impressora, conforme o firmware: a LK4 Pro (Klipper) liga
+  por **IP** ao Mainsail/Moonraker; a Prusa i3 MK3S e a Creality CR-X
+  (Marlin) ligam diretamente por **USB** (Web Serial), sem precisar de
+  Octoprint/Mainsail nem de passar por pen/SD.
 - Na LK4 Pro, opção de trocar o G-code inicial/final para as macros
   `PRINT_START` / `PRINT_END` do Klipper, se as tiveres no `printer.cfg`.
 
@@ -70,14 +72,39 @@ cors_domains:
     http://localhost:5173
 ```
 
+## Imprimir por USB (Prusa i3 MK3S, Creality CR-X)
+
+Usa a [Web Serial API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API)
+— só funciona em browsers baseados em Chromium (Chrome, Edge, Opera);
+Firefox e Safari não a implementam. No painel **2. Ligação**, escolhe o baud
+rate (115200 por omissão) e carrega em **Ligar por USB** para autorizares a
+porta série. Depois de fatiar, **Imprimir por USB** envia o G-code linha a
+linha, à espera do `ok` do firmware antes de enviar a seguinte (o mesmo
+esquema de controlo de fluxo que qualquer sender de G-code usa por padrão).
+
+**Limitações a saber:**
+- Só funciona com firmware Marlin genuíno — o Klipper não aceita G-code
+  diretamente pela porta série USB da forma que o Marlin aceita (fala um
+  protocolo binário próprio com o Klippy/Moonraker), por isso a LK4 Pro só
+  liga por IP.
+- **Cancelar impressão** para de enviar novas linhas e desliga os
+  aquecedores por segurança, mas os comandos já enviados para o buffer do
+  firmware continuam a executar — não é um "parar já".
+- Esta funcionalidade não foi testada numa impressora física real durante o
+  desenvolvimento (sem hardware disponível); a lógica segue o protocolo
+  padrão send-and-wait-for-ok do Marlin, mas testa com cuidado (com o painel
+  da impressora à vista) antes de confiares numa impressão sem supervisão.
+
 ## Ajustar as definições de impressora / adicionar uma nova
 
 `src/printers.js` tem o registo `PRINTERS` com os três perfis (LK4 Pro, Prusa
 i3 MK3S, Creality CR-X): dimensões, G-code inicial/final, limites de
-temperatura e valores por omissão. Cada uma está construída por cima de um
-perfil já incluído na `cura-wasm-definitions`, com overrides para os valores
-reais do hardware. Para adicionar outra impressora, segue o padrão de uma das
-existentes e acrescenta uma entrada a `PRINTERS`.
+temperatura, valores por omissão, `firmware` (`'klipper'` ou `'marlin'`) e
+`connection` (`'ip'` ou `'usb'` — determina qual delas a UI liga). Cada uma
+está construída por cima de um perfil já incluído na `cura-wasm-definitions`,
+com overrides para os valores reais do hardware. Para adicionar outra
+impressora, segue o padrão de uma das existentes e acrescenta uma entrada a
+`PRINTERS`.
 
 **Nota importante para quem editar G-code inicial/final aqui:** o CuraEngine
 compilado para WASM nunca resolve placeholders `{setting}` dentro do G-code
