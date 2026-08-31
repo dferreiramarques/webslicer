@@ -10,7 +10,7 @@ fatiamento corre inteiramente no teu computador/telemóvel.
 
 - Sem instalação — abre um separador e fatia.
 - Aceita ficheiros **.stl** e **.3mf**.
-- Três perfis de impressora prontos a usar: **Longer LK4 Pro**, **Prusa i3
+- Três perfis de impressora prontos a usar: **LK4 Pro**, **Prusa i3
   MK3S** e **Creality CR-X** (bico único) — todas Marlin/Klipper. Muda de
   impressora no painel lateral; a mesa e os limites de temperatura ajustam-se
   automaticamente.

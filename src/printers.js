@@ -24,7 +24,7 @@ import merge from 'lodash/merge';
 const SINGLE_EXTRUDER_TRAIN = { 0: 'extruder-0' };
 
 // ---------------------------------------------------------------------------
-// Longer LK4 Pro
+// LK4 Pro
 // ---------------------------------------------------------------------------
 
 const LK4PRO_START_GCODE_MARLIN = `; LK4 Pro — start G-code (Marlin/Klipper)
@@ -65,10 +65,10 @@ function buildLk4ProDefinition(useKlipperMacros = false) {
   const baseParent = resolvePrinter('creality_base');
 
   const overrides = {
-    name: 'Longer LK4 Pro',
+    name: 'LK4 Pro',
     metadata: { manufacturer: 'Longer (LGT)', visible: true },
     overrides: {
-      machine_name: { default_value: 'Longer LK4 Pro' },
+      machine_name: { default_value: 'LK4 Pro' },
       machine_width: { default_value: 220 },
       machine_depth: { default_value: 220 },
       machine_height: { default_value: 250 },
@@ -229,7 +229,7 @@ function buildCrXDefinition() {
 export const PRINTERS = {
   lk4pro: {
     id: 'lk4pro',
-    label: 'Longer LK4 Pro',
+    label: 'LK4 Pro',
     // Klipper só fala com o Moonraker/Mainsail em rede — o seu USB não
     // aceita G-code Marlin diretamente como uma placa Marlin normal.
     firmware: 'klipper',
