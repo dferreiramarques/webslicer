@@ -87,6 +87,11 @@ esquema de controlo de fluxo que qualquer sender de G-code usa por padrão).
   diretamente pela porta série USB da forma que o Marlin aceita (fala um
   protocolo binário próprio com o Klippy/Moonraker), por isso a LK4 Pro só
   liga por IP.
+- Só gere uma impressora USB ligada de cada vez (por agora). Enquanto
+  estiveres ligado a uma, o seletor de impressora (passo 1) fica bloqueado
+  para não trocares de perfil a meio de uma impressão em curso — isso
+  cortaria a ligação série sem aviso. Carrega em **Desligar** para libertar
+  a impressora e poderes escolher outra.
 - **Cancelar impressão** para de enviar novas linhas e desliga os
   aquecedores por segurança, mas os comandos já enviados para o buffer do
   firmware continuam a executar — não é um "parar já".

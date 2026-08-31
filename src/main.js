@@ -26,6 +26,7 @@ const infillDensityOut = el('infillDensityOut');
 const qualityPreset = el('qualityPreset');
 const layerHeightInput = el('layerHeight');
 const printerSelect = el('printerSelect');
+const printerLockHint = el('printerLockHint');
 const saveProfileBtn = el('saveProfileBtn');
 const resetProfileBtn = el('resetProfileBtn');
 const materialHeading = el('materialHeading');
@@ -207,6 +208,7 @@ function onUsbConnected() {
   usbBaudRate.disabled = true;
   usbStatus.textContent = 'Ligado.';
   updatePrintActionVisibility();
+  updatePrinterLockUI();
 }
 
 function onUsbDisconnected() {
@@ -218,6 +220,17 @@ function onUsbDisconnected() {
   usbPrintProgressRow.hidden = true;
   usbCancelPrintBtn.hidden = true;
   updatePrintActionVisibility();
+  updatePrinterLockUI();
+}
+
+// Só se gere uma ligação de cada vez — enquanto a porta USB estiver aberta,
+// a impressora fica "reservada" e as outras ficam bloqueadas no seletor,
+// para nunca se trocar de perfil a meio de uma impressão em curso (isso
+// cortaria a ligação série e deixava a impressão a meio sem aviso).
+function updatePrinterLockUI() {
+  const locked = serialPrinter.connected;
+  printerSelect.disabled = locked;
+  printerLockHint.hidden = !locked;
 }
 
 if (isSerialSupported()) {
@@ -233,6 +246,17 @@ if (isSerialSupported()) {
 /** Troca de impressora ativa: limites, mesa 3D, ligação, motor e perfil guardado. */
 function switchPrinter(printerId) {
   if (!PRINTERS[printerId]) return;
+
+  // Só se gere uma impressora ligada de cada vez — bloqueia a troca
+  // enquanto a impressora atual estiver a ocupar a porta USB (ver
+  // updatePrinterLockUI). O <select> já fica disabled nesse estado, isto é
+  // só uma segunda barreira caso a troca seja despoletada de outra forma.
+  if (serialPrinter.connected && printerId !== activePrinterId) {
+    printerSelect.value = activePrinterId;
+    setStatus('Desliga a impressora USB atual (passo 2) antes de trocar de impressora.', true);
+    return;
+  }
+
   activePrinterId = printerId;
   localStorage.setItem('webslicer:lastPrinter', printerId);
 
@@ -245,12 +269,6 @@ function switchPrinter(printerId) {
   klipperMacrosGroup.hidden = printer.firmware !== 'klipper';
 
   updateConnectionUI(printer);
-  // A porta USB liga a um dispositivo físico específico — trocar de perfil
-  // de impressora não significa que seja o mesmo cabo/porta.
-  if (serialPrinter.connected) {
-    serialPrinter.disconnect().then(onUsbDisconnected);
-  }
-
   loadProfileForActivePrinter();
 
   // A definição da impressora está embutida no motor — troca de impressora obriga a recriar
