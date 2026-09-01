@@ -24,6 +24,11 @@ fatiamento corre inteiramente no teu computador/telemóvel.
   Octoprint/Mainsail nem de passar por pen/SD.
 - Na LK4 Pro, opção de trocar o G-code inicial/final para as macros
   `PRINT_START` / `PRINT_END` do Klipper, se as tiveres no `printer.cfg`.
+- O fluxo é sempre nesta ordem: **1. Impressora → 2. Ligação → 3. Ficheiro →
+  4. Definições → 5. Imprimir**. Carregar um ficheiro fica bloqueado até
+  confirmares a impressora e a ligação, e trocar de impressora com um modelo
+  já carregado pede confirmação antes de o limpar — para nunca perderes
+  trabalho sem aviso.
 
 ## Correr localmente
 

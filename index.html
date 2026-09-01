@@ -31,9 +31,9 @@
     <main class="layout">
       <section class="viewport-pane">
         <div id="viewport"></div>
-        <div class="dropzone" id="dropzone">
+        <div class="dropzone locked" id="dropzone">
           <svg viewBox="0 0 24 24" width="32" height="32" fill="none"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <p>Arrasta um <strong>.stl</strong> ou <strong>.3mf</strong> para aqui<br/>ou clica para escolher</p>
+          <p id="dropzoneText">Confirma a impressora e a ligação (passo 2) antes de carregar um ficheiro.</p>
           <input type="file" id="fileInput" accept=".stl,.3mf" hidden />
         </div>
         <div class="model-info" id="modelInfo" hidden></div>
@@ -89,12 +89,15 @@
               </div>
               <p class="hint" id="usbStatus">Não ligado.</p>
             </div>
+
+            <button id="confirmPrinterBtn" class="primary full-width" type="button">Confirmar impressora e ligação →</button>
           </section>
 
           <section class="group">
             <h2>3. Ficheiro</h2>
-            <p class="hint" id="fileInfoHint">Nenhum ficheiro carregado.</p>
-            <button id="chooseFileBtn" type="button" class="secondary">Escolher ficheiro…</button>
+            <p class="hint" id="fileGateHint">Confirma a impressora e a ligação (passo 2) antes de carregar um ficheiro.</p>
+            <p class="hint" id="fileInfoHint" hidden>Nenhum ficheiro carregado.</p>
+            <button id="chooseFileBtn" type="button" class="secondary" disabled>Escolher ficheiro…</button>
           </section>
 
           <div class="step-divider">4. Definições de impressão</div>

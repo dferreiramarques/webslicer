@@ -43,6 +43,9 @@ const usbBaudRate = el('usbBaudRate');
 const usbConnectBtn = el('usbConnectBtn');
 const usbDisconnectBtn = el('usbDisconnectBtn');
 const usbStatus = el('usbStatus');
+const confirmPrinterBtn = el('confirmPrinterBtn');
+const dropzoneText = el('dropzoneText');
+const fileGateHint = el('fileGateHint');
 const chooseFileBtn = el('chooseFileBtn');
 const fileInfoHint = el('fileInfoHint');
 const usbPrintBtn = el('usbPrintBtn');
@@ -66,6 +69,10 @@ const GLOBAL_DEFAULTS = {
   useKlipperMacros: false
 };
 
+const DROPZONE_DEFAULT_HTML = 'Arrasta um <strong>.stl</strong> ou <strong>.3mf</strong> para aqui<br/>ou clica para escolher';
+const DROPZONE_LOCKED_HTML = 'Confirma a impressora e a ligação (passo 2)<br/>antes de carregar um ficheiro.';
+
+let printerConfirmed = false;
 let currentModel = null; // ArrayBuffer
 let currentModelExt = 'stl'; // 'stl' | '3mf'
 let currentGcode = null; // ArrayBuffer
@@ -233,6 +240,25 @@ function updatePrinterLockUI() {
   printerLockHint.hidden = !locked;
 }
 
+// Obriga a confirmar a impressora e a ligação antes de aceitar um ficheiro
+// — evita carregar um modelo com uma impressora "por defeito" e só depois
+// perceber, ao trocar de impressora, que isso limpa o modelo carregado.
+function updateFileGateUI() {
+  dropzone.classList.toggle('locked', !printerConfirmed);
+  dropzoneText.innerHTML = printerConfirmed ? DROPZONE_DEFAULT_HTML : DROPZONE_LOCKED_HTML;
+  chooseFileBtn.disabled = !printerConfirmed;
+  fileGateHint.hidden = printerConfirmed;
+  fileInfoHint.hidden = !printerConfirmed;
+  confirmPrinterBtn.textContent = printerConfirmed ? '✓ Impressora e ligação confirmadas' : 'Confirmar impressora e ligação →';
+  confirmPrinterBtn.disabled = printerConfirmed;
+}
+
+confirmPrinterBtn.addEventListener('click', () => {
+  printerConfirmed = true;
+  updateFileGateUI();
+  setStatus(`Impressora e ligação confirmadas. Carrega um modelo STL ou 3MF para começar.`);
+});
+
 if (isSerialSupported()) {
   navigator.serial.addEventListener('disconnect', () => {
     if (serialPrinter.connected) {
@@ -255,6 +281,18 @@ function switchPrinter(printerId) {
     printerSelect.value = activePrinterId;
     setStatus('Desliga a impressora USB atual (passo 2) antes de trocar de impressora.', true);
     return;
+  }
+
+  // Trocar de impressora limpa o modelo carregado (mesa/limites diferentes)
+  // — avisa antes de destruir trabalho já feito, em vez de o fazer em silêncio.
+  if (currentModel && printerId !== activePrinterId) {
+    const confirmed = window.confirm(
+      'Trocar de impressora vai limpar o modelo carregado — vais ter de o voltar a importar. Continuar?'
+    );
+    if (!confirmed) {
+      printerSelect.value = activePrinterId;
+      return;
+    }
   }
 
   activePrinterId = printerId;
@@ -285,6 +323,11 @@ function switchPrinter(printerId) {
   fileInfoHint.textContent = 'Nenhum ficheiro carregado.';
   resultRow.hidden = true;
   sliceBtn.disabled = true;
+
+  // Escolher uma impressora no seletor já conta como "confirmar" — o botão
+  // de confirmação só é mesmo necessário para quem fica com a predefinição.
+  printerConfirmed = true;
+  updateFileGateUI();
 
   setStatus(`Impressora: ${printer.label}. Carrega um modelo STL ou 3MF para começar.`);
 }
@@ -319,6 +362,10 @@ fileInput.addEventListener('change', (e) => {
 });
 
 async function handleFile(file) {
+  if (!printerConfirmed) {
+    setStatus('Confirma a impressora e a ligação (passo 2) antes de carregar um ficheiro.', true);
+    return;
+  }
   const match = file.name.toLowerCase().match(/\.(stl|3mf)$/);
   if (!match) {
     setStatus('Só ficheiros .stl ou .3mf são suportados por agora.', true);
@@ -595,13 +642,20 @@ function formatDuration(totalMinutes) {
   klipperMacrosGroup.hidden = printer.firmware !== 'klipper';
   updateConnectionUI(printer);
   loadProfileForActivePrinter();
-  setStatus(`Impressora: ${printer.label}. Carrega um modelo STL ou 3MF para começar.`);
+  updateFileGateUI();
+  setStatus(`Impressora: ${printer.label}. Confirma a impressora e a ligação (passo 2) antes de carregar um modelo.`);
 
   // Tenta religar a uma porta USB já autorizada nesta origem, sem novo popup
   if (printer.connection === 'usb' && isSerialSupported()) {
     try {
       const reconnected = await serialPrinter.reconnectIfAuthorized(Number(usbBaudRate.value));
-      if (reconnected) onUsbConnected();
+      if (reconnected) {
+        onUsbConnected();
+        // Já está ligado a um dispositivo real — conta como confirmado.
+        printerConfirmed = true;
+        updateFileGateUI();
+        setStatus(`Impressora: ${printer.label} (ligada por USB). Carrega um modelo STL ou 3MF para começar.`);
+      }
     } catch (err) {
       console.error(err);
     }
