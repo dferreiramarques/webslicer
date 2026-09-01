@@ -17,8 +17,14 @@ fatiamento corre inteiramente no teu computador/telemóvel.
 - **+ Adicionar impressora…** no fundo desse dropdown abre um assistente
   simples (nome, firmware Marlin/Klipper, dimensões da mesa, bico,
   temperaturas máximas) para guardares outra impressora neste browser — usa
-  G-code inicial/final genérico e seguro. Um botão "Remover esta impressora
-  personalizada" aparece no painel quando tens uma selecionada.
+  G-code inicial/final genérico e seguro. Uma secção **Definições avançadas**
+  (fechada por omissão — 99% dos casos não precisa dela) tem velocidade de
+  impressão, aceleração, jerk, retração e altura da gantry.
+  **Duplicar impressora** clona a que tens selecionada (embutida ou
+  personalizada) para o assistente, já preenchido, para ajustares e
+  guardares como nova. Numa impressora personalizada aparecem também
+  **Editar impressora** (guarda por cima da mesma, mesmo id) e **Remover
+  esta impressora personalizada**.
 - Perfis personalizados: ajusta as definições e carrega em **Guardar perfil**
   para as reteres por impressora entre sessões (guardado no browser). **Repor
   predefinições** volta aos valores de fábrica dessa impressora.

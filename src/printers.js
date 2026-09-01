@@ -335,8 +335,20 @@ const GENERIC_END_GCODE_KLIPPER_MACRO = `PRINT_END`;
  * embutidas por este mesmo motivo (confirmado a inspecionar o código-fonte
  * da cura-wasm-definitions), por isso construir isto à mão é equivalente.
  */
+// Predefinições dos parâmetros avançados — cobrem a maioria das impressoras
+// hobby (Bowden ligeiramente conservador); só relevantes para quem abre a
+// secção "Definições avançadas" do assistente.
+const DEFAULT_ADVANCED = {
+  acceleration: 500,
+  jerkXY: 8,
+  retractionDistance: 2,
+  retractionSpeed: 45,
+  gantryHeight: 25
+};
+
 function buildCustomDefinition(custom, useKlipperMacros = false) {
   const { limits, label } = custom;
+  const advanced = custom.advanced || DEFAULT_ADVANCED;
   const useMacros = custom.firmware === 'klipper' && useKlipperMacros;
 
   const printer = {
@@ -355,6 +367,11 @@ function buildCustomDefinition(custom, useKlipperMacros = false) {
       machine_heated_bed: { default_value: true },
       machine_center_is_zero: { default_value: false },
       machine_gcode_flavor: { default_value: 'RepRap (Marlin/Sprinter)' },
+      machine_acceleration: { default_value: advanced.acceleration },
+      machine_max_jerk_xy: { default_value: advanced.jerkXY },
+      retraction_amount: { default_value: advanced.retractionDistance },
+      retraction_speed: { default_value: advanced.retractionSpeed },
+      gantry_height: { value: advanced.gantryHeight },
       machine_start_gcode: {
         default_value: useMacros ? GENERIC_START_GCODE_KLIPPER_MACRO : buildGenericStartGcode(limits.bedDepth)
       },
@@ -378,12 +395,19 @@ function buildCustomDefinition(custom, useKlipperMacros = false) {
   return { printer, extruders: [extruder] };
 }
 
+function registerCustomPrinter(entry) {
+  customPrinters[entry.id] = { ...entry, custom: true, buildDefinition: (useKlipperMacros) => buildCustomDefinition(entry, useKlipperMacros) };
+  return customPrinters[entry.id];
+}
+
 function loadCustomPrinters() {
   try {
     const raw = JSON.parse(localStorage.getItem(CUSTOM_PRINTERS_KEY) || '[]');
     const entries = {};
     for (const data of raw) {
-      entries[data.id] = { ...data, custom: true, buildDefinition: (useKlipperMacros) => buildCustomDefinition(data, useKlipperMacros) };
+      // "advanced" não existia em impressoras guardadas antes desta funcionalidade
+      const entry = { ...data, advanced: data.advanced || DEFAULT_ADVANCED };
+      entries[entry.id] = { ...entry, custom: true, buildDefinition: (useKlipperMacros) => buildCustomDefinition(entry, useKlipperMacros) };
     }
     return entries;
   } catch {
@@ -392,8 +416,8 @@ function loadCustomPrinters() {
 }
 
 function persistCustomPrinters() {
-  const data = Object.values(customPrinters).map(({ id, label, firmware, connection, limits, defaults }) => ({
-    id, label, firmware, connection, limits, defaults
+  const data = Object.values(customPrinters).map(({ id, label, firmware, connection, limits, defaults, advanced }) => ({
+    id, label, firmware, connection, limits, defaults, advanced
   }));
   localStorage.setItem(CUSTOM_PRINTERS_KEY, JSON.stringify(data));
 }
@@ -414,15 +438,18 @@ export function isCustomPrinter(id) {
 }
 
 /**
- * Cria e guarda uma impressora personalizada a partir dos dados do
- * assistente "Adicionar impressora". Lança Error com uma mensagem em
- * português se algum campo for inválido.
+ * Valida os campos do assistente "Adicionar/Editar impressora" e devolve os
+ * dados prontos a guardar (sem "id" — isso é decidido por quem chama).
+ * Lança Error com uma mensagem em português se algum campo for inválido.
  */
-export function addCustomPrinter(form) {
+const DEFAULT_CUSTOM_PRINT_SPEED = 50;
+
+function buildCustomPrinterEntry(form) {
   const label = (form.label || '').trim();
   if (!label) throw new Error('Indica um nome para a impressora.');
 
-  const num = (value, fieldLabel) => {
+  const num = (value, fieldLabel, fallback) => {
+    if (fallback != null && (value === undefined || value === '')) return fallback;
     const n = Number(value);
     if (!Number.isFinite(n) || n <= 0) throw new Error(`${fieldLabel} tem de ser um número positivo.`);
     return n;
@@ -439,9 +466,16 @@ export function addCustomPrinter(form) {
     filamentDiameter: 1.75
   };
 
-  const id = `custom_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  const entry = {
-    id,
+  const printSpeed = num(form.printSpeed, 'Velocidade de impressão', DEFAULT_CUSTOM_PRINT_SPEED);
+  const advanced = {
+    acceleration: num(form.acceleration, 'Aceleração', DEFAULT_ADVANCED.acceleration),
+    jerkXY: num(form.jerkXY, 'Jerk', DEFAULT_ADVANCED.jerkXY),
+    retractionDistance: num(form.retractionDistance, 'Distância de retração', DEFAULT_ADVANCED.retractionDistance),
+    retractionSpeed: num(form.retractionSpeed, 'Velocidade de retração', DEFAULT_ADVANCED.retractionSpeed),
+    gantryHeight: num(form.gantryHeight, 'Altura da gantry', DEFAULT_ADVANCED.gantryHeight)
+  };
+
+  return {
     label,
     firmware,
     connection: firmware === 'klipper' ? 'ip' : 'usb',
@@ -449,18 +483,51 @@ export function addCustomPrinter(form) {
     defaults: {
       printTemp: Math.min(200, limits.maxNozzleTemp),
       bedTemp: Math.min(60, limits.maxBedTemp),
-      printSpeed: 50,
+      printSpeed,
       layerHeight: 0.2
-    }
+    },
+    advanced
   };
+}
 
-  customPrinters[id] = { ...entry, custom: true, buildDefinition: (useKlipperMacros) => buildCustomDefinition(entry, useKlipperMacros) };
+export function addCustomPrinter(form) {
+  const id = `custom_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const entry = registerCustomPrinter({ id, ...buildCustomPrinterEntry(form) });
   persistCustomPrinters();
-  return customPrinters[id];
+  return entry;
+}
+
+/** Atualiza uma impressora personalizada existente, mantendo o mesmo id. */
+export function updateCustomPrinter(id, form) {
+  if (!(id in customPrinters)) throw new Error('Impressora não encontrada.');
+  const entry = registerCustomPrinter({ id, ...buildCustomPrinterEntry(form) });
+  persistCustomPrinters();
+  return entry;
 }
 
 export function removeCustomPrinter(id) {
   if (!(id in customPrinters)) return;
   delete customPrinters[id];
   persistCustomPrinters();
+}
+
+/** Dados do assistente pré-preenchidos a partir de uma impressora existente (editar/duplicar). */
+export function printerToFormData(printer) {
+  const advanced = printer.advanced || DEFAULT_ADVANCED;
+  return {
+    label: printer.label,
+    firmware: printer.firmware,
+    bedWidth: printer.limits.bedWidth,
+    bedDepth: printer.limits.bedDepth,
+    maxHeight: printer.limits.maxHeight,
+    nozzleDiameter: printer.limits.nozzleDiameter,
+    maxNozzleTemp: printer.limits.maxNozzleTemp,
+    maxBedTemp: printer.limits.maxBedTemp,
+    printSpeed: printer.defaults?.printSpeed ?? DEFAULT_CUSTOM_PRINT_SPEED,
+    acceleration: advanced.acceleration,
+    jerkXY: advanced.jerkXY,
+    retractionDistance: advanced.retractionDistance,
+    retractionSpeed: advanced.retractionSpeed,
+    gantryHeight: advanced.gantryHeight
+  };
 }

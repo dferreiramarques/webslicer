@@ -55,6 +55,10 @@
               <button id="saveProfileBtn" class="secondary" type="button">Guardar perfil</button>
               <button id="resetProfileBtn" class="secondary" type="button">Repor predefinições</button>
             </div>
+            <div class="result-actions">
+              <button id="duplicatePrinterBtn" class="secondary" type="button">Duplicar impressora</button>
+              <button id="editCustomPrinterBtn" class="secondary" type="button" hidden>Editar impressora</button>
+            </div>
             <button id="removeCustomPrinterBtn" class="secondary full-width" type="button" hidden>Remover esta impressora personalizada</button>
           </section>
 
@@ -216,7 +220,7 @@
 
     <div class="modal-overlay" id="addPrinterModal" hidden>
       <div class="modal">
-        <h2>Adicionar impressora</h2>
+        <h2 id="addPrinterTitle">Adicionar impressora</h2>
         <label class="field">
           <span>Nome</span>
           <input type="text" id="newPrinterName" placeholder="ex: Ender 3 V2" maxlength="40" />
@@ -239,6 +243,28 @@
           <label class="field"><span>Máx. cama (°C)</span><input type="number" id="newPrinterMaxBedTemp" value="100" min="1" /></label>
         </div>
         <p class="hint">O G-code inicial/final usa um modelo genérico seguro (homing + linha de purga); os comandos de aquecimento são inseridos automaticamente pelo motor de fatiamento.</p>
+
+        <button id="toggleAdvancedBtn" class="secondary full-width" type="button" aria-expanded="false">Definições avançadas ▾</button>
+        <div id="advancedSettings" hidden>
+          <label class="field small">
+            <span>Velocidade de impressão predefinida (mm/s)</span>
+            <input type="number" id="newPrinterPrintSpeed" value="50" min="1" />
+          </label>
+          <div class="field-row">
+            <label class="field"><span>Aceleração (mm/s²)</span><input type="number" id="newPrinterAcceleration" value="500" min="1" /></label>
+            <label class="field"><span>Jerk (mm/s)</span><input type="number" id="newPrinterJerk" value="8" min="0.1" step="0.1" /></label>
+          </div>
+          <div class="field-row">
+            <label class="field"><span>Retração — distância (mm)</span><input type="number" id="newPrinterRetractionDistance" value="2" min="0" step="0.1" /></label>
+            <label class="field"><span>Retração — velocidade (mm/s)</span><input type="number" id="newPrinterRetractionSpeed" value="45" min="1" /></label>
+          </div>
+          <label class="field small">
+            <span>Altura livre da gantry (mm)</span>
+            <input type="number" id="newPrinterGantryHeight" value="25" min="0" />
+          </label>
+          <p class="hint">Só relevante se souberes estes valores de cor (ex: da configuração do Marlin/Klipper). Deixa como está se não tiveres a certeza.</p>
+        </div>
+
         <p class="hint error" id="addPrinterError" hidden></p>
         <div class="result-actions">
           <button id="cancelAddPrinterBtn" type="button" class="secondary">Cancelar</button>

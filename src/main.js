@@ -7,8 +7,10 @@ import {
   getPrinter,
   getAllPrinterEntries,
   addCustomPrinter,
+  updateCustomPrinter,
   removeCustomPrinter,
-  isCustomPrinter
+  isCustomPrinter,
+  printerToFormData
 } from './printers.js';
 import { SerialPrinter, isSerialSupported } from './serial-printer.js';
 
@@ -38,7 +40,10 @@ const printerLockHint = el('printerLockHint');
 const saveProfileBtn = el('saveProfileBtn');
 const resetProfileBtn = el('resetProfileBtn');
 const removeCustomPrinterBtn = el('removeCustomPrinterBtn');
+const duplicatePrinterBtn = el('duplicatePrinterBtn');
+const editCustomPrinterBtn = el('editCustomPrinterBtn');
 const addPrinterModal = el('addPrinterModal');
+const addPrinterTitle = el('addPrinterTitle');
 const newPrinterName = el('newPrinterName');
 const newPrinterFirmware = el('newPrinterFirmware');
 const newPrinterWidth = el('newPrinterWidth');
@@ -47,6 +52,14 @@ const newPrinterHeight = el('newPrinterHeight');
 const newPrinterNozzle = el('newPrinterNozzle');
 const newPrinterMaxNozzleTemp = el('newPrinterMaxNozzleTemp');
 const newPrinterMaxBedTemp = el('newPrinterMaxBedTemp');
+const toggleAdvancedBtn = el('toggleAdvancedBtn');
+const advancedSettings = el('advancedSettings');
+const newPrinterPrintSpeed = el('newPrinterPrintSpeed');
+const newPrinterAcceleration = el('newPrinterAcceleration');
+const newPrinterJerk = el('newPrinterJerk');
+const newPrinterRetractionDistance = el('newPrinterRetractionDistance');
+const newPrinterRetractionSpeed = el('newPrinterRetractionSpeed');
+const newPrinterGantryHeight = el('newPrinterGantryHeight');
 const addPrinterError = el('addPrinterError');
 const cancelAddPrinterBtn = el('cancelAddPrinterBtn');
 const confirmAddPrinterBtn = el('confirmAddPrinterBtn');
@@ -135,21 +148,71 @@ renderPrinterOptions();
 printerSelect.addEventListener('change', () => {
   if (printerSelect.value === ADD_PRINTER_OPTION) {
     printerSelect.value = activePrinterId;
-    openAddPrinterModal();
+    openPrinterModal('add');
     return;
   }
   switchPrinter(printerSelect.value);
 });
 
-function openAddPrinterModal() {
-  newPrinterName.value = '';
-  newPrinterFirmware.value = 'marlin';
-  newPrinterWidth.value = '220';
-  newPrinterDepth.value = '220';
-  newPrinterHeight.value = '250';
-  newPrinterNozzle.value = '0.4';
-  newPrinterMaxNozzleTemp.value = '260';
-  newPrinterMaxBedTemp.value = '100';
+const ADD_PRINTER_FIELD_DEFAULTS = {
+  label: '', firmware: 'marlin',
+  bedWidth: 220, bedDepth: 220, maxHeight: 250,
+  nozzleDiameter: 0.4, maxNozzleTemp: 260, maxBedTemp: 100,
+  printSpeed: 50, acceleration: 500, jerkXY: 8,
+  retractionDistance: 2, retractionSpeed: 45, gantryHeight: 25
+};
+
+// 'add' | 'edit' | 'duplicate' — 'edit' guarda por cima do id em editingPrinterId,
+// os outros dois criam sempre uma impressora nova.
+let modalMode = 'add';
+let editingPrinterId = null;
+
+function fillPrinterForm(data) {
+  newPrinterName.value = data.label;
+  newPrinterFirmware.value = data.firmware;
+  newPrinterWidth.value = data.bedWidth;
+  newPrinterDepth.value = data.bedDepth;
+  newPrinterHeight.value = data.maxHeight;
+  newPrinterNozzle.value = data.nozzleDiameter;
+  newPrinterMaxNozzleTemp.value = data.maxNozzleTemp;
+  newPrinterMaxBedTemp.value = data.maxBedTemp;
+  newPrinterPrintSpeed.value = data.printSpeed;
+  newPrinterAcceleration.value = data.acceleration;
+  newPrinterJerk.value = data.jerkXY;
+  newPrinterRetractionDistance.value = data.retractionDistance;
+  newPrinterRetractionSpeed.value = data.retractionSpeed;
+  newPrinterGantryHeight.value = data.gantryHeight;
+}
+
+function setAdvancedExpanded(expanded) {
+  advancedSettings.hidden = !expanded;
+  toggleAdvancedBtn.setAttribute('aria-expanded', String(expanded));
+  toggleAdvancedBtn.textContent = expanded ? 'Definições avançadas ▴' : 'Definições avançadas ▾';
+}
+
+toggleAdvancedBtn.addEventListener('click', () => setAdvancedExpanded(advancedSettings.hidden));
+
+/**
+ * Abre o assistente da impressora.
+ * mode 'add': campos em branco/predefinidos.
+ * mode 'edit': pré-preenchido com a impressora personalizada indicada, guarda por cima do mesmo id.
+ * mode 'duplicate': pré-preenchido com QUALQUER impressora (embutida ou personalizada), cria sempre uma nova.
+ */
+function openPrinterModal(mode, sourcePrinter) {
+  modalMode = mode;
+  editingPrinterId = mode === 'edit' ? sourcePrinter.id : null;
+
+  if (sourcePrinter) {
+    const data = printerToFormData(sourcePrinter);
+    if (mode === 'duplicate') data.label = `${data.label} (cópia)`;
+    fillPrinterForm(data);
+  } else {
+    fillPrinterForm(ADD_PRINTER_FIELD_DEFAULTS);
+  }
+
+  addPrinterTitle.textContent = mode === 'edit' ? 'Editar impressora' : 'Adicionar impressora';
+  confirmAddPrinterBtn.textContent = mode === 'edit' ? 'Guardar alterações' : 'Adicionar impressora';
+  setAdvancedExpanded(false);
   addPrinterError.hidden = true;
   addPrinterModal.hidden = false;
   newPrinterName.focus();
@@ -164,22 +227,49 @@ addPrinterModal.addEventListener('click', (e) => {
   if (e.target === addPrinterModal) closeAddPrinterModal();
 });
 
+duplicatePrinterBtn.addEventListener('click', () => openPrinterModal('duplicate', getActivePrinter()));
+
+editCustomPrinterBtn.addEventListener('click', () => {
+  const printer = getActivePrinter();
+  if (!printer || !isCustomPrinter(printer.id)) return;
+  openPrinterModal('edit', printer);
+});
+
 confirmAddPrinterBtn.addEventListener('click', () => {
+  const form = {
+    label: newPrinterName.value,
+    firmware: newPrinterFirmware.value,
+    bedWidth: newPrinterWidth.value,
+    bedDepth: newPrinterDepth.value,
+    maxHeight: newPrinterHeight.value,
+    nozzleDiameter: newPrinterNozzle.value,
+    maxNozzleTemp: newPrinterMaxNozzleTemp.value,
+    maxBedTemp: newPrinterMaxBedTemp.value,
+    printSpeed: newPrinterPrintSpeed.value,
+    acceleration: newPrinterAcceleration.value,
+    jerkXY: newPrinterJerk.value,
+    retractionDistance: newPrinterRetractionDistance.value,
+    retractionSpeed: newPrinterRetractionSpeed.value,
+    gantryHeight: newPrinterGantryHeight.value
+  };
+
+  const isEdit = modalMode === 'edit';
+
+  // Editar a impressora já ativa não passa pelo aviso de switchPrinter (o id
+  // não muda), mas a reaplicação abaixo limpa o modelo à mesma — avisa aqui.
+  if (isEdit && editingPrinterId === activePrinterId && currentModel) {
+    const proceed = window.confirm(
+      'Guardar estas alterações vai limpar o modelo carregado — vais ter de o voltar a importar. Continuar?'
+    );
+    if (!proceed) return;
+  }
+
   try {
-    const printer = addCustomPrinter({
-      label: newPrinterName.value,
-      firmware: newPrinterFirmware.value,
-      bedWidth: newPrinterWidth.value,
-      bedDepth: newPrinterDepth.value,
-      maxHeight: newPrinterHeight.value,
-      nozzleDiameter: newPrinterNozzle.value,
-      maxNozzleTemp: newPrinterMaxNozzleTemp.value,
-      maxBedTemp: newPrinterMaxBedTemp.value
-    });
+    const printer = isEdit ? updateCustomPrinter(editingPrinterId, form) : addCustomPrinter(form);
     closeAddPrinterModal();
     renderPrinterOptions();
     switchPrinter(printer.id);
-    setStatus(`Impressora "${printer.label}" adicionada.`);
+    setStatus(isEdit ? `Impressora "${printer.label}" atualizada.` : `Impressora "${printer.label}" adicionada.`);
   } catch (err) {
     addPrinterError.textContent = err.message;
     addPrinterError.hidden = false;
@@ -399,6 +489,7 @@ function switchPrinter(printerId) {
   bedTempInput.max = printer.limits.maxBedTemp;
   klipperMacrosGroup.hidden = printer.firmware !== 'klipper';
   removeCustomPrinterBtn.hidden = !isCustomPrinter(printer.id);
+  editCustomPrinterBtn.hidden = !isCustomPrinter(printer.id);
 
   updateConnectionUI(printer);
   loadProfileForActivePrinter();
@@ -735,6 +826,7 @@ function formatDuration(totalMinutes) {
   bedTempInput.max = printer.limits.maxBedTemp;
   klipperMacrosGroup.hidden = printer.firmware !== 'klipper';
   removeCustomPrinterBtn.hidden = !isCustomPrinter(printer.id);
+  editCustomPrinterBtn.hidden = !isCustomPrinter(printer.id);
   updateConnectionUI(printer);
   loadProfileForActivePrinter();
   updateFileGateUI();
