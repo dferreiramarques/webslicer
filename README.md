@@ -14,6 +14,11 @@ fatiamento corre inteiramente no teu computador/telemóvel.
   MK3S** e **Creality CR-X** (bico único) — todas Marlin/Klipper. Muda de
   impressora no painel lateral; a mesa e os limites de temperatura ajustam-se
   automaticamente.
+- **+ Adicionar impressora…** no fundo desse dropdown abre um assistente
+  simples (nome, firmware Marlin/Klipper, dimensões da mesa, bico,
+  temperaturas máximas) para guardares outra impressora neste browser — usa
+  G-code inicial/final genérico e seguro. Um botão "Remover esta impressora
+  personalizada" aparece no painel quando tens uma selecionada.
 - Perfis personalizados: ajusta as definições e carrega em **Guardar perfil**
   para as reteres por impressora entre sessões (guardado no browser). **Repor
   predefinições** volta aos valores de fábrica dessa impressora.

@@ -55,6 +55,7 @@
               <button id="saveProfileBtn" class="secondary" type="button">Guardar perfil</button>
               <button id="resetProfileBtn" class="secondary" type="button">Repor predefinições</button>
             </div>
+            <button id="removeCustomPrinterBtn" class="secondary full-width" type="button" hidden>Remover esta impressora personalizada</button>
           </section>
 
           <section class="group">
@@ -212,6 +213,39 @@
     <footer class="statusbar">
       <span id="statusMessage">Carrega um modelo STL para começar.</span>
     </footer>
+
+    <div class="modal-overlay" id="addPrinterModal" hidden>
+      <div class="modal">
+        <h2>Adicionar impressora</h2>
+        <label class="field">
+          <span>Nome</span>
+          <input type="text" id="newPrinterName" placeholder="ex: Ender 3 V2" maxlength="40" />
+        </label>
+        <label class="field">
+          <span>Firmware</span>
+          <select id="newPrinterFirmware">
+            <option value="marlin" selected>Marlin (liga por USB)</option>
+            <option value="klipper">Klipper (liga por IP / Mainsail)</option>
+          </select>
+        </label>
+        <div class="field-row">
+          <label class="field"><span>Largura X (mm)</span><input type="number" id="newPrinterWidth" value="220" min="1" /></label>
+          <label class="field"><span>Profundidade Y (mm)</span><input type="number" id="newPrinterDepth" value="220" min="1" /></label>
+          <label class="field"><span>Altura Z (mm)</span><input type="number" id="newPrinterHeight" value="250" min="1" /></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>Bico (mm)</span><input type="number" id="newPrinterNozzle" value="0.4" step="0.05" min="0.1" /></label>
+          <label class="field"><span>Máx. bico (°C)</span><input type="number" id="newPrinterMaxNozzleTemp" value="260" min="1" /></label>
+          <label class="field"><span>Máx. cama (°C)</span><input type="number" id="newPrinterMaxBedTemp" value="100" min="1" /></label>
+        </div>
+        <p class="hint">O G-code inicial/final usa um modelo genérico seguro (homing + linha de purga); os comandos de aquecimento são inseridos automaticamente pelo motor de fatiamento.</p>
+        <p class="hint error" id="addPrinterError" hidden></p>
+        <div class="result-actions">
+          <button id="cancelAddPrinterBtn" type="button" class="secondary">Cancelar</button>
+          <button id="confirmAddPrinterBtn" type="button" class="primary">Adicionar impressora</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/src/main.js"></script>

@@ -283,3 +283,184 @@ export const PRINTERS = {
 };
 
 export const DEFAULT_PRINTER_ID = 'lk4pro';
+
+// ---------------------------------------------------------------------------
+// Impressoras personalizadas (assistente "Adicionar impressora")
+// ---------------------------------------------------------------------------
+
+const CUSTOM_PRINTERS_KEY = 'webslicer:customPrinters';
+
+// G-code genérico e seguro para uma impressora personalizada: sem
+// placeholders `{setting}` (ver nota no topo do ficheiro), homing e uma
+// linha de purga simples. A linha de purga usa a profundidade real da mesa
+// para nunca sair da área de impressão em mesas pequenas.
+function buildGenericStartGcode(bedDepth) {
+  const purgeY = Math.max(20, Math.min(bedDepth - 10, 200));
+  return `; G-code inicial genérico
+G28 ; home a todos os eixos
+G92 E0 ; reset extrusora
+G1 Z2.0 F3000 ; sobe Z para não riscar a cama
+G1 X0.1 Y20 Z0.3 F5000.0 ; posição inicial
+G1 X0.1 Y${purgeY} Z0.3 F1500.0 E15 ; primeira linha de purga
+G1 X0.4 Y${purgeY} Z0.3 F5000.0
+G1 X0.4 Y20 Z0.3 F1500.0 E30 ; segunda linha de purga
+G92 E0 ; reset extrusora
+G1 Z2.0 F3000`;
+}
+
+function buildGenericEndGcode(bedDepth) {
+  return `; G-code final genérico
+G91 ; posicionamento relativo
+G1 E-2 F2700
+G1 E-2 Z0.2 F2400
+G1 X5 Y5 F3000
+G1 Z10
+G90 ; posicionamento absoluto
+G1 X0 Y${bedDepth} ; apresenta a impressão
+M106 S0
+M104 S0
+M140 S0
+M84 X Y E`;
+}
+
+const GENERIC_START_GCODE_KLIPPER_MACRO = `PRINT_START BED_TEMP=${KLIPPER_MACRO_SENTINELS.bedTemp} EXTRUDER_TEMP=${KLIPPER_MACRO_SENTINELS.extruderTemp}`;
+const GENERIC_END_GCODE_KLIPPER_MACRO = `PRINT_END`;
+
+/**
+ * Constrói a definição de uma impressora personalizada diretamente sobre a
+ * base "fdmprinter"/"fdmextruder" (já embutida no próprio CuraEngine WASM —
+ * por isso não passamos por resolvePrinter/resolveExtruder aqui, ao
+ * contrário das impressoras com perfil na cura-wasm-definitions). O
+ * `inherits: 'fdmprinter'` sobrevive sempre à resolução das impressoras
+ * embutidas por este mesmo motivo (confirmado a inspecionar o código-fonte
+ * da cura-wasm-definitions), por isso construir isto à mão é equivalente.
+ */
+function buildCustomDefinition(custom, useKlipperMacros = false) {
+  const { limits, label } = custom;
+  const useMacros = custom.firmware === 'klipper' && useKlipperMacros;
+
+  const printer = {
+    name: label,
+    inherits: 'fdmprinter',
+    metadata: {
+      manufacturer: 'Personalizada',
+      visible: true,
+      machine_extruder_trains: SINGLE_EXTRUDER_TRAIN
+    },
+    overrides: {
+      machine_name: { default_value: label },
+      machine_width: { default_value: limits.bedWidth },
+      machine_depth: { default_value: limits.bedDepth },
+      machine_height: { default_value: limits.maxHeight },
+      machine_heated_bed: { default_value: true },
+      machine_center_is_zero: { default_value: false },
+      machine_gcode_flavor: { default_value: 'RepRap (Marlin/Sprinter)' },
+      machine_start_gcode: {
+        default_value: useMacros ? GENERIC_START_GCODE_KLIPPER_MACRO : buildGenericStartGcode(limits.bedDepth)
+      },
+      machine_end_gcode: {
+        default_value: useMacros ? GENERIC_END_GCODE_KLIPPER_MACRO : buildGenericEndGcode(limits.bedDepth)
+      }
+    }
+  };
+
+  const extruder = {
+    name: 'Extruder 1',
+    inherits: 'fdmextruder',
+    metadata: { machine: custom.id, position: '0' },
+    overrides: {
+      extruder_nr: { default_value: 0 },
+      machine_nozzle_size: { default_value: limits.nozzleDiameter },
+      material_diameter: { default_value: limits.filamentDiameter }
+    }
+  };
+
+  return { printer, extruders: [extruder] };
+}
+
+function loadCustomPrinters() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CUSTOM_PRINTERS_KEY) || '[]');
+    const entries = {};
+    for (const data of raw) {
+      entries[data.id] = { ...data, custom: true, buildDefinition: (useKlipperMacros) => buildCustomDefinition(data, useKlipperMacros) };
+    }
+    return entries;
+  } catch {
+    return {};
+  }
+}
+
+function persistCustomPrinters() {
+  const data = Object.values(customPrinters).map(({ id, label, firmware, connection, limits, defaults }) => ({
+    id, label, firmware, connection, limits, defaults
+  }));
+  localStorage.setItem(CUSTOM_PRINTERS_KEY, JSON.stringify(data));
+}
+
+let customPrinters = loadCustomPrinters();
+
+/** Todas as impressoras disponíveis: embutidas + personalizadas guardadas neste browser. */
+export function getAllPrinterEntries() {
+  return [...Object.values(PRINTERS), ...Object.values(customPrinters)];
+}
+
+export function getPrinter(id) {
+  return PRINTERS[id] || customPrinters[id];
+}
+
+export function isCustomPrinter(id) {
+  return id in customPrinters;
+}
+
+/**
+ * Cria e guarda uma impressora personalizada a partir dos dados do
+ * assistente "Adicionar impressora". Lança Error com uma mensagem em
+ * português se algum campo for inválido.
+ */
+export function addCustomPrinter(form) {
+  const label = (form.label || '').trim();
+  if (!label) throw new Error('Indica um nome para a impressora.');
+
+  const num = (value, fieldLabel) => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) throw new Error(`${fieldLabel} tem de ser um número positivo.`);
+    return n;
+  };
+
+  const firmware = form.firmware === 'klipper' ? 'klipper' : 'marlin';
+  const limits = {
+    bedWidth: num(form.bedWidth, 'Largura (X)'),
+    bedDepth: num(form.bedDepth, 'Profundidade (Y)'),
+    maxHeight: num(form.maxHeight, 'Altura (Z)'),
+    nozzleDiameter: num(form.nozzleDiameter, 'Diâmetro do bico'),
+    maxNozzleTemp: num(form.maxNozzleTemp, 'Temp. máx. do bico'),
+    maxBedTemp: num(form.maxBedTemp, 'Temp. máx. da cama'),
+    filamentDiameter: 1.75
+  };
+
+  const id = `custom_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const entry = {
+    id,
+    label,
+    firmware,
+    connection: firmware === 'klipper' ? 'ip' : 'usb',
+    limits,
+    defaults: {
+      printTemp: Math.min(200, limits.maxNozzleTemp),
+      bedTemp: Math.min(60, limits.maxBedTemp),
+      printSpeed: 50,
+      layerHeight: 0.2
+    }
+  };
+
+  customPrinters[id] = { ...entry, custom: true, buildDefinition: (useKlipperMacros) => buildCustomDefinition(entry, useKlipperMacros) };
+  persistCustomPrinters();
+  return customPrinters[id];
+}
+
+export function removeCustomPrinter(id) {
+  if (!(id in customPrinters)) return;
+  delete customPrinters[id];
+  persistCustomPrinters();
+}

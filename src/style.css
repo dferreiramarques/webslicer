@@ -147,6 +147,21 @@ output { font-family: var(--mono); font-size: 11px; color: var(--accent); }
 
 .hint { font-size: 11px; color: var(--text-dim); line-height: 1.5; margin: 6px 0 0; }
 .hint code { background: var(--bg-raised); padding: 1px 5px; border-radius: 4px; }
+.hint.error { color: var(--danger); }
+
+.field-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(10, 12, 14, 0.7);
+  align-items: center; justify-content: center;
+  z-index: 100; padding: 20px;
+}
+.modal-overlay:not([hidden]) { display: flex; }
+.modal {
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 22px; width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto;
+}
+.modal h2 { font-size: 15px; margin: 0 0 16px; font-weight: 600; }
 
 .panel-footer {
   border-top: 1px solid var(--border);

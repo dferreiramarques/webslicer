@@ -1,7 +1,15 @@
 import './style.css';
 import { CuraWASM } from 'cura-wasm';
 import { Viewer } from './viewer.js';
-import { PRINTERS, DEFAULT_PRINTER_ID, KLIPPER_MACRO_SENTINELS } from './printers.js';
+import {
+  DEFAULT_PRINTER_ID,
+  KLIPPER_MACRO_SENTINELS,
+  getPrinter,
+  getAllPrinterEntries,
+  addCustomPrinter,
+  removeCustomPrinter,
+  isCustomPrinter
+} from './printers.js';
 import { SerialPrinter, isSerialSupported } from './serial-printer.js';
 
 // --- Elementos ---
@@ -29,6 +37,19 @@ const printerSelect = el('printerSelect');
 const printerLockHint = el('printerLockHint');
 const saveProfileBtn = el('saveProfileBtn');
 const resetProfileBtn = el('resetProfileBtn');
+const removeCustomPrinterBtn = el('removeCustomPrinterBtn');
+const addPrinterModal = el('addPrinterModal');
+const newPrinterName = el('newPrinterName');
+const newPrinterFirmware = el('newPrinterFirmware');
+const newPrinterWidth = el('newPrinterWidth');
+const newPrinterDepth = el('newPrinterDepth');
+const newPrinterHeight = el('newPrinterHeight');
+const newPrinterNozzle = el('newPrinterNozzle');
+const newPrinterMaxNozzleTemp = el('newPrinterMaxNozzleTemp');
+const newPrinterMaxBedTemp = el('newPrinterMaxBedTemp');
+const addPrinterError = el('addPrinterError');
+const cancelAddPrinterBtn = el('cancelAddPrinterBtn');
+const confirmAddPrinterBtn = el('confirmAddPrinterBtn');
 const materialHeading = el('materialHeading');
 const klipperMacrosGroup = el('klipperMacrosGroup');
 const printerSubtitle = el('printerSubtitle');
@@ -78,9 +99,9 @@ let currentModelExt = 'stl'; // 'stl' | '3mf'
 let currentGcode = null; // ArrayBuffer
 let currentGcodeName = 'model.gcode';
 let activePrinterId = localStorage.getItem('webslicer:lastPrinter') || DEFAULT_PRINTER_ID;
-if (!PRINTERS[activePrinterId]) activePrinterId = DEFAULT_PRINTER_ID;
+if (!getPrinter(activePrinterId)) activePrinterId = DEFAULT_PRINTER_ID;
 
-const getActivePrinter = () => PRINTERS[activePrinterId];
+const getActivePrinter = () => getPrinter(activePrinterId);
 const profileKey = (printerId) => `webslicer:profile:${printerId}`;
 const serialPrinter = new SerialPrinter();
 
@@ -93,15 +114,87 @@ const viewport = document.getElementById('viewport');
 const viewer = new Viewer(viewport, getActivePrinter().limits);
 
 // --- Seletor de impressora ---
-for (const printer of Object.values(PRINTERS)) {
-  const option = document.createElement('option');
-  option.value = printer.id;
-  option.textContent = printer.label;
-  printerSelect.appendChild(option);
-}
-printerSelect.value = activePrinterId;
+const ADD_PRINTER_OPTION = '__add__';
 
-printerSelect.addEventListener('change', () => switchPrinter(printerSelect.value));
+function renderPrinterOptions() {
+  printerSelect.innerHTML = '';
+  for (const printer of getAllPrinterEntries()) {
+    const option = document.createElement('option');
+    option.value = printer.id;
+    option.textContent = printer.label;
+    printerSelect.appendChild(option);
+  }
+  const addOption = document.createElement('option');
+  addOption.value = ADD_PRINTER_OPTION;
+  addOption.textContent = '+ Adicionar impressora…';
+  printerSelect.appendChild(addOption);
+  printerSelect.value = activePrinterId;
+}
+renderPrinterOptions();
+
+printerSelect.addEventListener('change', () => {
+  if (printerSelect.value === ADD_PRINTER_OPTION) {
+    printerSelect.value = activePrinterId;
+    openAddPrinterModal();
+    return;
+  }
+  switchPrinter(printerSelect.value);
+});
+
+function openAddPrinterModal() {
+  newPrinterName.value = '';
+  newPrinterFirmware.value = 'marlin';
+  newPrinterWidth.value = '220';
+  newPrinterDepth.value = '220';
+  newPrinterHeight.value = '250';
+  newPrinterNozzle.value = '0.4';
+  newPrinterMaxNozzleTemp.value = '260';
+  newPrinterMaxBedTemp.value = '100';
+  addPrinterError.hidden = true;
+  addPrinterModal.hidden = false;
+  newPrinterName.focus();
+}
+
+function closeAddPrinterModal() {
+  addPrinterModal.hidden = true;
+}
+
+cancelAddPrinterBtn.addEventListener('click', closeAddPrinterModal);
+addPrinterModal.addEventListener('click', (e) => {
+  if (e.target === addPrinterModal) closeAddPrinterModal();
+});
+
+confirmAddPrinterBtn.addEventListener('click', () => {
+  try {
+    const printer = addCustomPrinter({
+      label: newPrinterName.value,
+      firmware: newPrinterFirmware.value,
+      bedWidth: newPrinterWidth.value,
+      bedDepth: newPrinterDepth.value,
+      maxHeight: newPrinterHeight.value,
+      nozzleDiameter: newPrinterNozzle.value,
+      maxNozzleTemp: newPrinterMaxNozzleTemp.value,
+      maxBedTemp: newPrinterMaxBedTemp.value
+    });
+    closeAddPrinterModal();
+    renderPrinterOptions();
+    switchPrinter(printer.id);
+    setStatus(`Impressora "${printer.label}" adicionada.`);
+  } catch (err) {
+    addPrinterError.textContent = err.message;
+    addPrinterError.hidden = false;
+  }
+});
+
+removeCustomPrinterBtn.addEventListener('click', () => {
+  const printer = getActivePrinter();
+  if (!printer || !isCustomPrinter(printer.id)) return;
+  if (!window.confirm(`Remover a impressora "${printer.label}"? Isto também apaga o perfil guardado para ela.`)) return;
+  removeCustomPrinter(printer.id);
+  localStorage.removeItem(profileKey(printer.id));
+  renderPrinterOptions();
+  switchPrinter(DEFAULT_PRINTER_ID);
+});
 
 function collectProfile() {
   return {
@@ -271,7 +364,7 @@ if (isSerialSupported()) {
 
 /** Troca de impressora ativa: limites, mesa 3D, ligação, motor e perfil guardado. */
 function switchPrinter(printerId) {
-  if (!PRINTERS[printerId]) return;
+  if (!getPrinter(printerId)) return;
 
   // Só se gere uma impressora ligada de cada vez — bloqueia a troca
   // enquanto a impressora atual estiver a ocupar a porta USB (ver
@@ -305,6 +398,7 @@ function switchPrinter(printerId) {
   printTempInput.max = printer.limits.maxNozzleTemp;
   bedTempInput.max = printer.limits.maxBedTemp;
   klipperMacrosGroup.hidden = printer.firmware !== 'klipper';
+  removeCustomPrinterBtn.hidden = !isCustomPrinter(printer.id);
 
   updateConnectionUI(printer);
   loadProfileForActivePrinter();
@@ -421,7 +515,7 @@ function getSlicer(printerId, useKlipperMacros) {
   if (slicer == null || slicerKey !== key) {
     setEngineStatus('idle', 'motor por iniciar');
     slicer = new CuraWASM({
-      definition: PRINTERS[printerId].buildDefinition(useKlipperMacros),
+      definition: getPrinter(printerId).buildDefinition(useKlipperMacros),
       overrides: [],
       verbose: false
     });
@@ -640,6 +734,7 @@ function formatDuration(totalMinutes) {
   printTempInput.max = printer.limits.maxNozzleTemp;
   bedTempInput.max = printer.limits.maxBedTemp;
   klipperMacrosGroup.hidden = printer.firmware !== 'klipper';
+  removeCustomPrinterBtn.hidden = !isCustomPrinter(printer.id);
   updateConnectionUI(printer);
   loadProfileForActivePrinter();
   updateFileGateUI();
