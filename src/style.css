@@ -163,11 +163,22 @@ output { font-family: var(--mono); font-size: 11px; color: var(--accent); }
 .modal-overlay:not([hidden]) { display: flex; }
 .modal {
   background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px;
-  padding: 22px; width: 100%; max-width: 480px; max-height: 90vh;
+  padding: 22px; width: 100%; max-width: min(94vw, 580px); max-height: 90vh;
   overflow-y: auto; overflow-x: hidden;
 }
 .modal h2 { font-size: 15px; margin: 0 0 16px; font-weight: 600; }
 .modal input[type="number"], .modal input[type="text"], .modal select { width: 100%; }
+
+.printer-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 0; border-bottom: 1px solid var(--border);
+}
+.printer-row:last-child { border-bottom: none; }
+.printer-row-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.printer-row-info strong { font-size: 13px; }
+.printer-row-info .hint { margin: 0; }
+.printer-row-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.printer-row-actions button { padding: 6px 10px; font-size: 12px; }
 
 .panel-footer {
   border-top: 1px solid var(--border);

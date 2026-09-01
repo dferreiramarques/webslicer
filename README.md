@@ -24,7 +24,10 @@ fatiamento corre inteiramente no teu computador/telemóvel.
   personalizada) para o assistente, já preenchido, para ajustares e
   guardares como nova. Numa impressora personalizada aparecem também
   **Editar impressora** (guarda por cima da mesma, mesmo id) e **Remover
-  esta impressora personalizada**.
+  esta impressora personalizada**. Assim que tiveres pelo menos uma
+  impressora personalizada guardada, aparece **Gerir impressoras
+  personalizadas…** junto ao seletor — lista todas com Editar/Remover por
+  linha, sem teres de trocar a impressora ativa só para arrumar a lista.
 - Perfis personalizados: ajusta as definições e carrega em **Guardar perfil**
   para as reteres por impressora entre sessões (guardado no browser). **Repor
   predefinições** volta aos valores de fábrica dessa impressora.

@@ -42,6 +42,11 @@ const resetProfileBtn = el('resetProfileBtn');
 const removeCustomPrinterBtn = el('removeCustomPrinterBtn');
 const duplicatePrinterBtn = el('duplicatePrinterBtn');
 const editCustomPrinterBtn = el('editCustomPrinterBtn');
+const managePrintersBtn = el('managePrintersBtn');
+const managePrintersModal = el('managePrintersModal');
+const managePrintersList = el('managePrintersList');
+const managePrintersEmpty = el('managePrintersEmpty');
+const closeManagePrintersBtn = el('closeManagePrintersBtn');
 const addPrinterModal = el('addPrinterModal');
 const addPrinterTitle = el('addPrinterTitle');
 const newPrinterName = el('newPrinterName');
@@ -142,6 +147,8 @@ function renderPrinterOptions() {
   addOption.textContent = '+ Adicionar impressora…';
   printerSelect.appendChild(addOption);
   printerSelect.value = activePrinterId;
+
+  managePrintersBtn.hidden = !getAllPrinterEntries().some((p) => isCustomPrinter(p.id));
 }
 renderPrinterOptions();
 
@@ -268,7 +275,12 @@ confirmAddPrinterBtn.addEventListener('click', () => {
     const printer = isEdit ? updateCustomPrinter(editingPrinterId, form) : addCustomPrinter(form);
     closeAddPrinterModal();
     renderPrinterOptions();
-    switchPrinter(printer.id);
+    // Adicionar/duplicar troca sempre para a impressora nova. Editar só troca
+    // se estavas mesmo a editar a impressora já ativa — editar outra (ex: a
+    // partir de "Gerir impressoras") não deve saltar a sessão para ela.
+    if (!isEdit || printer.id === activePrinterId) {
+      switchPrinter(printer.id);
+    }
     setStatus(isEdit ? `Impressora "${printer.label}" atualizada.` : `Impressora "${printer.label}" adicionada.`);
   } catch (err) {
     addPrinterError.textContent = err.message;
@@ -276,14 +288,80 @@ confirmAddPrinterBtn.addEventListener('click', () => {
   }
 });
 
-removeCustomPrinterBtn.addEventListener('click', () => {
-  const printer = getActivePrinter();
-  if (!printer || !isCustomPrinter(printer.id)) return;
-  if (!window.confirm(`Remover a impressora "${printer.label}"? Isto também apaga o perfil guardado para ela.`)) return;
+/** Remove uma impressora personalizada após confirmação; troca para a predefinida se era a ativa. */
+function deleteCustomPrinter(printer) {
+  if (!window.confirm(`Remover a impressora "${printer.label}"? Isto também apaga o perfil guardado para ela.`)) return false;
+  const wasActive = printer.id === activePrinterId;
   removeCustomPrinter(printer.id);
   localStorage.removeItem(profileKey(printer.id));
   renderPrinterOptions();
-  switchPrinter(DEFAULT_PRINTER_ID);
+  if (wasActive) switchPrinter(DEFAULT_PRINTER_ID);
+  return true;
+}
+
+removeCustomPrinterBtn.addEventListener('click', () => {
+  const printer = getActivePrinter();
+  if (!printer || !isCustomPrinter(printer.id)) return;
+  deleteCustomPrinter(printer);
+});
+
+// --- Gerir impressoras personalizadas (lista com editar/remover por linha) ---
+function renderManagePrintersList() {
+  const customs = getAllPrinterEntries().filter((p) => isCustomPrinter(p.id));
+  managePrintersList.innerHTML = '';
+  managePrintersEmpty.hidden = customs.length > 0;
+
+  for (const printer of customs) {
+    const row = document.createElement('div');
+    row.className = 'printer-row';
+
+    const info = document.createElement('div');
+    info.className = 'printer-row-info';
+    const name = document.createElement('strong');
+    name.textContent = printer.label;
+    const meta = document.createElement('span');
+    meta.className = 'hint';
+    const connectionLabel = printer.firmware === 'klipper' ? 'Klipper · IP' : 'Marlin · USB';
+    meta.textContent = `${connectionLabel} · ${printer.limits.bedWidth}×${printer.limits.bedDepth}×${printer.limits.maxHeight}mm`;
+    info.append(name, meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'printer-row-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'secondary';
+    editBtn.textContent = 'Editar';
+    editBtn.addEventListener('click', () => {
+      closeManagePrintersModal();
+      openPrinterModal('edit', printer);
+    });
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'secondary';
+    removeBtn.textContent = 'Remover';
+    removeBtn.addEventListener('click', () => {
+      if (deleteCustomPrinter(printer)) renderManagePrintersList();
+    });
+
+    actions.append(editBtn, removeBtn);
+    row.append(info, actions);
+    managePrintersList.appendChild(row);
+  }
+}
+
+function closeManagePrintersModal() {
+  managePrintersModal.hidden = true;
+}
+
+managePrintersBtn.addEventListener('click', () => {
+  renderManagePrintersList();
+  managePrintersModal.hidden = false;
+});
+closeManagePrintersBtn.addEventListener('click', closeManagePrintersModal);
+managePrintersModal.addEventListener('click', (e) => {
+  if (e.target === managePrintersModal) closeManagePrintersModal();
 });
 
 function collectProfile() {
