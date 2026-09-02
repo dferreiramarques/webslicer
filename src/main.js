@@ -13,6 +13,27 @@ import {
   printerToFormData
 } from './printers.js';
 import { SerialPrinter, isSerialSupported } from './serial-printer.js';
+import {
+  DEFAULT_PROFILE_ID,
+  getProfiles,
+  createProfile,
+  updateProfileSettings,
+  renameProfile,
+  duplicateProfile,
+  deleteProfile,
+  getActiveProfileId,
+  setActiveProfileId,
+  clearProfiles
+} from './profiles.js';
+import {
+  getAllMaterials,
+  getMaterial,
+  isCustomMaterial,
+  addMaterial,
+  updateMaterial,
+  removeMaterial,
+  DEFAULT_MATERIAL_ID
+} from './materials.js';
 
 // --- Elementos ---
 const el = (id) => document.getElementById(id);
@@ -37,15 +58,10 @@ const qualityPreset = el('qualityPreset');
 const layerHeightInput = el('layerHeight');
 const printerSelect = el('printerSelect');
 const printerLockHint = el('printerLockHint');
-const saveProfileBtn = el('saveProfileBtn');
-const resetProfileBtn = el('resetProfileBtn');
-const removeCustomPrinterBtn = el('removeCustomPrinterBtn');
-const duplicatePrinterBtn = el('duplicatePrinterBtn');
-const editCustomPrinterBtn = el('editCustomPrinterBtn');
 const managePrintersBtn = el('managePrintersBtn');
 const managePrintersModal = el('managePrintersModal');
 const managePrintersList = el('managePrintersList');
-const managePrintersEmpty = el('managePrintersEmpty');
+const createPrinterBtn = el('createPrinterBtn');
 const closeManagePrintersBtn = el('closeManagePrintersBtn');
 const addPrinterModal = el('addPrinterModal');
 const addPrinterTitle = el('addPrinterTitle');
@@ -92,6 +108,21 @@ const usbCancelPrintBtn = el('usbCancelPrintBtn');
 const usbPrintProgressRow = el('usbPrintProgressRow');
 const usbPrintProgressFill = el('usbPrintProgressFill');
 const usbPrintProgressLabel = el('usbPrintProgressLabel');
+const printProfileSelect = el('printProfileSelect');
+const savePrintProfileBtn = el('savePrintProfileBtn');
+const managePrintProfilesBtn = el('managePrintProfilesBtn');
+const managePrintProfilesModal = el('managePrintProfilesModal');
+const managePrintProfilesList = el('managePrintProfilesList');
+const managePrintProfilesEmpty = el('managePrintProfilesEmpty');
+const closeManagePrintProfilesBtn = el('closeManagePrintProfilesBtn');
+const materialSelect = el('materialSelect');
+const manageMaterialsBtn = el('manageMaterialsBtn');
+const manageMaterialsModal = el('manageMaterialsModal');
+const manageMaterialsList = el('manageMaterialsList');
+const createMaterialBtn = el('createMaterialBtn');
+const closeManageMaterialsBtn = el('closeManageMaterialsBtn');
+
+const CUSTOM_MATERIAL_OPTION = '__custom_material__';
 
 const QUALITY_PRESETS = {
   draft: 0.28,
@@ -120,7 +151,6 @@ let activePrinterId = localStorage.getItem('webslicer:lastPrinter') || DEFAULT_P
 if (!getPrinter(activePrinterId)) activePrinterId = DEFAULT_PRINTER_ID;
 
 const getActivePrinter = () => getPrinter(activePrinterId);
-const profileKey = (printerId) => `webslicer:profile:${printerId}`;
 const serialPrinter = new SerialPrinter();
 
 // Guarda o host do Mainsail entre sessões (localStorage é só configuração local do browser, não é persistência de dados sensíveis)
@@ -132,8 +162,6 @@ const viewport = document.getElementById('viewport');
 const viewer = new Viewer(viewport, getActivePrinter().limits);
 
 // --- Seletor de impressora ---
-const ADD_PRINTER_OPTION = '__add__';
-
 function renderPrinterOptions() {
   printerSelect.innerHTML = '';
   for (const printer of getAllPrinterEntries()) {
@@ -142,24 +170,11 @@ function renderPrinterOptions() {
     option.textContent = printer.label;
     printerSelect.appendChild(option);
   }
-  const addOption = document.createElement('option');
-  addOption.value = ADD_PRINTER_OPTION;
-  addOption.textContent = '+ Adicionar impressora…';
-  printerSelect.appendChild(addOption);
   printerSelect.value = activePrinterId;
-
-  managePrintersBtn.hidden = !getAllPrinterEntries().some((p) => isCustomPrinter(p.id));
 }
 renderPrinterOptions();
 
-printerSelect.addEventListener('change', () => {
-  if (printerSelect.value === ADD_PRINTER_OPTION) {
-    printerSelect.value = activePrinterId;
-    openPrinterModal('add');
-    return;
-  }
-  switchPrinter(printerSelect.value);
-});
+printerSelect.addEventListener('change', () => switchPrinter(printerSelect.value));
 
 const ADD_PRINTER_FIELD_DEFAULTS = {
   label: '', firmware: 'marlin',
@@ -234,14 +249,6 @@ addPrinterModal.addEventListener('click', (e) => {
   if (e.target === addPrinterModal) closeAddPrinterModal();
 });
 
-duplicatePrinterBtn.addEventListener('click', () => openPrinterModal('duplicate', getActivePrinter()));
-
-editCustomPrinterBtn.addEventListener('click', () => {
-  const printer = getActivePrinter();
-  if (!printer || !isCustomPrinter(printer.id)) return;
-  openPrinterModal('edit', printer);
-});
-
 confirmAddPrinterBtn.addEventListener('click', () => {
   const form = {
     label: newPrinterName.value,
@@ -290,28 +297,20 @@ confirmAddPrinterBtn.addEventListener('click', () => {
 
 /** Remove uma impressora personalizada após confirmação; troca para a predefinida se era a ativa. */
 function deleteCustomPrinter(printer) {
-  if (!window.confirm(`Remover a impressora "${printer.label}"? Isto também apaga o perfil guardado para ela.`)) return false;
+  if (!window.confirm(`Remover a impressora "${printer.label}"? Isto também apaga os perfis de impressão guardados para ela.`)) return false;
   const wasActive = printer.id === activePrinterId;
   removeCustomPrinter(printer.id);
-  localStorage.removeItem(profileKey(printer.id));
+  clearProfiles(printer.id);
   renderPrinterOptions();
   if (wasActive) switchPrinter(DEFAULT_PRINTER_ID);
   return true;
 }
 
-removeCustomPrinterBtn.addEventListener('click', () => {
-  const printer = getActivePrinter();
-  if (!printer || !isCustomPrinter(printer.id)) return;
-  deleteCustomPrinter(printer);
-});
-
-// --- Gerir impressoras personalizadas (lista com editar/remover por linha) ---
+// --- Gerir impressoras (embutidas + personalizadas) ---
 function renderManagePrintersList() {
-  const customs = getAllPrinterEntries().filter((p) => isCustomPrinter(p.id));
   managePrintersList.innerHTML = '';
-  managePrintersEmpty.hidden = customs.length > 0;
 
-  for (const printer of customs) {
+  for (const printer of getAllPrinterEntries()) {
     const row = document.createElement('div');
     row.className = 'printer-row';
 
@@ -322,30 +321,44 @@ function renderManagePrintersList() {
     const meta = document.createElement('span');
     meta.className = 'hint';
     const connectionLabel = printer.firmware === 'klipper' ? 'Klipper · IP' : 'Marlin · USB';
-    meta.textContent = `${connectionLabel} · ${printer.limits.bedWidth}×${printer.limits.bedDepth}×${printer.limits.maxHeight}mm`;
+    const builtInSuffix = isCustomPrinter(printer.id) ? '' : ' · embutida';
+    meta.textContent = `${connectionLabel} · ${printer.limits.bedWidth}×${printer.limits.bedDepth}×${printer.limits.maxHeight}mm${builtInSuffix}`;
     info.append(name, meta);
 
     const actions = document.createElement('div');
     actions.className = 'printer-row-actions';
 
-    const editBtn = document.createElement('button');
-    editBtn.type = 'button';
-    editBtn.className = 'secondary';
-    editBtn.textContent = 'Editar';
-    editBtn.addEventListener('click', () => {
+    const duplicateBtn = document.createElement('button');
+    duplicateBtn.type = 'button';
+    duplicateBtn.className = 'secondary';
+    duplicateBtn.textContent = 'Duplicar';
+    duplicateBtn.addEventListener('click', () => {
       closeManagePrintersModal();
-      openPrinterModal('edit', printer);
+      openPrinterModal('duplicate', printer);
     });
+    actions.append(duplicateBtn);
 
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'secondary';
-    removeBtn.textContent = 'Remover';
-    removeBtn.addEventListener('click', () => {
-      if (deleteCustomPrinter(printer)) renderManagePrintersList();
-    });
+    if (isCustomPrinter(printer.id)) {
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'secondary';
+      editBtn.textContent = 'Editar';
+      editBtn.addEventListener('click', () => {
+        closeManagePrintersModal();
+        openPrinterModal('edit', printer);
+      });
+      actions.append(editBtn);
 
-    actions.append(editBtn, removeBtn);
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'secondary';
+      removeBtn.textContent = 'Remover';
+      removeBtn.addEventListener('click', () => {
+        if (deleteCustomPrinter(printer)) renderManagePrintersList();
+      });
+      actions.append(removeBtn);
+    }
+
     row.append(info, actions);
     managePrintersList.appendChild(row);
   }
@@ -359,11 +372,16 @@ managePrintersBtn.addEventListener('click', () => {
   renderManagePrintersList();
   managePrintersModal.hidden = false;
 });
+createPrinterBtn.addEventListener('click', () => {
+  closeManagePrintersModal();
+  openPrinterModal('add');
+});
 closeManagePrintersBtn.addEventListener('click', closeManagePrintersModal);
 managePrintersModal.addEventListener('click', (e) => {
   if (e.target === managePrintersModal) closeManagePrintersModal();
 });
 
+// --- Perfis de impressão (definições de fatiamento nomeadas, por impressora) ---
 function collectProfile() {
   return {
     qualityPreset: qualityPreset.value,
@@ -393,6 +411,7 @@ function applyProfile(profile) {
   el('supportEnable').checked = profile.supportEnable;
   el('adhesionType').value = profile.adhesionType;
   useKlipperMacrosCheckbox.checked = profile.useKlipperMacros;
+  syncMaterialSelectFromFields();
 }
 
 function matchQualityPreset(layerHeight) {
@@ -411,13 +430,308 @@ function defaultProfileFor(printer) {
   };
 }
 
-/** Aplica o perfil guardado da impressora, ou as predefinições se não houver nenhum. */
-function loadProfileForActivePrinter() {
+function renderPrintProfileOptions() {
   const printer = getActivePrinter();
-  const saved = localStorage.getItem(profileKey(printer.id));
-  const profile = saved ? { ...defaultProfileFor(printer), ...JSON.parse(saved) } : defaultProfileFor(printer);
-  applyProfile(profile);
+  const profiles = getProfiles(printer.id);
+
+  printProfileSelect.innerHTML = '';
+  const defaultOption = document.createElement('option');
+  defaultOption.value = DEFAULT_PROFILE_ID;
+  defaultOption.textContent = 'Predefinição';
+  printProfileSelect.appendChild(defaultOption);
+  for (const profile of profiles) {
+    const option = document.createElement('option');
+    option.value = profile.id;
+    option.textContent = profile.name;
+    printProfileSelect.appendChild(option);
+  }
+
+  const savedActiveId = getActiveProfileId(printer.id);
+  const stillExists = savedActiveId === DEFAULT_PROFILE_ID || profiles.some((p) => p.id === savedActiveId);
+  printProfileSelect.value = stillExists ? savedActiveId : DEFAULT_PROFILE_ID;
 }
+
+/** Aplica ao formulário o perfil de impressão atualmente selecionado no dropdown (ou a predefinição). */
+function applyActivePrintProfile() {
+  const printer = getActivePrinter();
+  const selectedId = printProfileSelect.value;
+  if (selectedId === DEFAULT_PROFILE_ID) {
+    applyProfile(defaultProfileFor(printer));
+    return;
+  }
+  const profile = getProfiles(printer.id).find((p) => p.id === selectedId);
+  applyProfile(profile ? profile.settings : defaultProfileFor(printer));
+}
+
+printProfileSelect.addEventListener('change', () => {
+  setActiveProfileId(activePrinterId, printProfileSelect.value);
+  applyActivePrintProfile();
+});
+
+savePrintProfileBtn.addEventListener('click', () => {
+  const printer = getActivePrinter();
+  const selectedId = printProfileSelect.value;
+
+  if (selectedId === DEFAULT_PROFILE_ID) {
+    const name = window.prompt('Nome do novo perfil de impressão:', '');
+    if (!name) return;
+    try {
+      const profile = createProfile(printer.id, name, collectProfile());
+      setActiveProfileId(printer.id, profile.id);
+      renderPrintProfileOptions();
+      setStatus(`Perfil "${profile.name}" criado.`);
+    } catch (err) {
+      setStatus(err.message, true);
+    }
+    return;
+  }
+
+  try {
+    updateProfileSettings(printer.id, selectedId, collectProfile());
+    setStatus('Perfil de impressão atualizado.');
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+});
+
+function renderPrintProfilesList() {
+  const printer = getActivePrinter();
+  const profiles = getProfiles(printer.id);
+  managePrintProfilesList.innerHTML = '';
+  managePrintProfilesEmpty.hidden = profiles.length > 0;
+
+  for (const profile of profiles) {
+    const row = document.createElement('div');
+    row.className = 'printer-row';
+
+    const info = document.createElement('div');
+    info.className = 'printer-row-info';
+    const name = document.createElement('strong');
+    name.textContent = profile.name;
+    info.append(name);
+
+    const actions = document.createElement('div');
+    actions.className = 'printer-row-actions';
+
+    const renameBtn = document.createElement('button');
+    renameBtn.type = 'button';
+    renameBtn.className = 'secondary';
+    renameBtn.textContent = 'Renomear';
+    renameBtn.addEventListener('click', () => {
+      const newName = window.prompt('Novo nome do perfil:', profile.name);
+      if (!newName) return;
+      try {
+        renameProfile(printer.id, profile.id, newName);
+        renderPrintProfilesList();
+        renderPrintProfileOptions();
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    });
+
+    const duplicateBtn = document.createElement('button');
+    duplicateBtn.type = 'button';
+    duplicateBtn.className = 'secondary';
+    duplicateBtn.textContent = 'Duplicar';
+    duplicateBtn.addEventListener('click', () => {
+      const newName = window.prompt('Nome do novo perfil:', `${profile.name} (cópia)`);
+      if (!newName) return;
+      try {
+        duplicateProfile(printer.id, profile.id, newName);
+        renderPrintProfilesList();
+        renderPrintProfileOptions();
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    });
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'secondary';
+    removeBtn.textContent = 'Apagar';
+    removeBtn.addEventListener('click', () => {
+      if (!window.confirm(`Apagar o perfil "${profile.name}"?`)) return;
+      const wasActive = printProfileSelect.value === profile.id;
+      deleteProfile(printer.id, profile.id);
+      if (wasActive) setActiveProfileId(printer.id, DEFAULT_PROFILE_ID);
+      renderPrintProfilesList();
+      renderPrintProfileOptions();
+      if (wasActive) applyActivePrintProfile();
+    });
+
+    actions.append(renameBtn, duplicateBtn, removeBtn);
+    row.append(info, actions);
+    managePrintProfilesList.appendChild(row);
+  }
+}
+
+function closeManagePrintProfilesModal() {
+  managePrintProfilesModal.hidden = true;
+}
+
+managePrintProfilesBtn.addEventListener('click', () => {
+  renderPrintProfilesList();
+  managePrintProfilesModal.hidden = false;
+});
+closeManagePrintProfilesBtn.addEventListener('click', closeManagePrintProfilesModal);
+managePrintProfilesModal.addEventListener('click', (e) => {
+  if (e.target === managePrintProfilesModal) closeManagePrintProfilesModal();
+});
+
+// --- Filamentos (perfis de material — globais, não por impressora) ---
+function renderMaterialOptions() {
+  materialSelect.innerHTML = '';
+  for (const material of getAllMaterials()) {
+    const option = document.createElement('option');
+    option.value = material.id;
+    option.textContent = material.name;
+    materialSelect.appendChild(option);
+  }
+  const customOption = document.createElement('option');
+  customOption.value = CUSTOM_MATERIAL_OPTION;
+  customOption.textContent = 'Personalizado';
+  customOption.disabled = true;
+  customOption.hidden = true;
+  materialSelect.appendChild(customOption);
+}
+
+/** Mostra no seletor o filamento cujas temperaturas correspondem aos campos atuais, ou "Personalizado". */
+function syncMaterialSelectFromFields() {
+  const printTemp = Number(printTempInput.value);
+  const bedTemp = Number(bedTempInput.value);
+  const match = getAllMaterials().find((m) => m.printTemp === printTemp && m.bedTemp === bedTemp);
+  materialSelect.value = match ? match.id : CUSTOM_MATERIAL_OPTION;
+}
+
+materialSelect.addEventListener('change', () => {
+  const material = getMaterial(materialSelect.value);
+  if (!material) return;
+  const printer = getActivePrinter();
+  const cappedPrintTemp = Math.min(material.printTemp, printer.limits.maxNozzleTemp);
+  const cappedBedTemp = Math.min(material.bedTemp, printer.limits.maxBedTemp);
+  printTempInput.value = cappedPrintTemp;
+  bedTempInput.value = cappedBedTemp;
+  if (cappedPrintTemp < material.printTemp || cappedBedTemp < material.bedTemp) {
+    setStatus(`"${material.name}" excede os limites da ${printer.label} — temperaturas ajustadas ao máximo permitido.`, true);
+  }
+});
+
+printTempInput.addEventListener('input', syncMaterialSelectFromFields);
+bedTempInput.addEventListener('input', syncMaterialSelectFromFields);
+
+function promptMaterialDetails(defaults) {
+  const name = window.prompt('Nome do filamento:', defaults.name);
+  if (!name) return null;
+  const printTempRaw = window.prompt('Temperatura do bico (°C):', String(defaults.printTemp));
+  if (printTempRaw == null) return null;
+  const bedTempRaw = window.prompt('Temperatura da cama (°C):', String(defaults.bedTemp));
+  if (bedTempRaw == null) return null;
+  return { name, printTemp: Number(printTempRaw), bedTemp: Number(bedTempRaw) };
+}
+
+createMaterialBtn.addEventListener('click', () => {
+  const details = promptMaterialDetails({ name: '', printTemp: printTempInput.value, bedTemp: bedTempInput.value });
+  if (!details) return;
+  try {
+    const material = addMaterial(details.name, details.printTemp, details.bedTemp);
+    renderMaterialOptions();
+    renderMaterialsList();
+    materialSelect.value = material.id;
+    materialSelect.dispatchEvent(new Event('change'));
+    setStatus(`Filamento "${material.name}" criado.`);
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+});
+
+function renderMaterialsList() {
+  manageMaterialsList.innerHTML = '';
+
+  for (const material of getAllMaterials()) {
+    const row = document.createElement('div');
+    row.className = 'printer-row';
+
+    const info = document.createElement('div');
+    info.className = 'printer-row-info';
+    const name = document.createElement('strong');
+    name.textContent = material.name;
+    const meta = document.createElement('span');
+    meta.className = 'hint';
+    meta.textContent = `Bico ${material.printTemp}°C · Cama ${material.bedTemp}°C${isCustomMaterial(material.id) ? '' : ' · genérico'}`;
+    info.append(name, meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'printer-row-actions';
+
+    if (isCustomMaterial(material.id)) {
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'secondary';
+      editBtn.textContent = 'Editar';
+      editBtn.addEventListener('click', () => {
+        const details = promptMaterialDetails(material);
+        if (!details) return;
+        try {
+          updateMaterial(material.id, details.name, details.printTemp, details.bedTemp);
+          renderMaterialOptions();
+          renderMaterialsList();
+          syncMaterialSelectFromFields();
+        } catch (err) {
+          setStatus(err.message, true);
+        }
+      });
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'secondary';
+      removeBtn.textContent = 'Remover';
+      removeBtn.addEventListener('click', () => {
+        if (!window.confirm(`Remover o filamento "${material.name}"?`)) return;
+        removeMaterial(material.id);
+        renderMaterialOptions();
+        renderMaterialsList();
+        syncMaterialSelectFromFields();
+      });
+
+      actions.append(editBtn, removeBtn);
+    } else {
+      const duplicateBtn = document.createElement('button');
+      duplicateBtn.type = 'button';
+      duplicateBtn.className = 'secondary';
+      duplicateBtn.textContent = 'Duplicar';
+      duplicateBtn.addEventListener('click', () => {
+        const details = promptMaterialDetails({ name: `${material.name} (cópia)`, printTemp: material.printTemp, bedTemp: material.bedTemp });
+        if (!details) return;
+        try {
+          const copy = addMaterial(details.name, details.printTemp, details.bedTemp);
+          renderMaterialOptions();
+          renderMaterialsList();
+          materialSelect.value = copy.id;
+          materialSelect.dispatchEvent(new Event('change'));
+        } catch (err) {
+          setStatus(err.message, true);
+        }
+      });
+      actions.append(duplicateBtn);
+    }
+
+    row.append(info, actions);
+    manageMaterialsList.appendChild(row);
+  }
+}
+
+function closeManageMaterialsModal() {
+  manageMaterialsModal.hidden = true;
+}
+
+manageMaterialsBtn.addEventListener('click', () => {
+  renderMaterialsList();
+  manageMaterialsModal.hidden = false;
+});
+closeManageMaterialsBtn.addEventListener('click', closeManageMaterialsModal);
+manageMaterialsModal.addEventListener('click', (e) => {
+  if (e.target === manageMaterialsModal) closeManageMaterialsModal();
+});
 
 // --- Ligação (IP / USB) ---
 // Cada impressora só aceita uma via: Klipper fala Moonraker/Mainsail em
@@ -530,7 +844,7 @@ if (isSerialSupported()) {
   });
 }
 
-/** Troca de impressora ativa: limites, mesa 3D, ligação, motor e perfil guardado. */
+/** Troca de impressora ativa: limites, mesa 3D, ligação, motor e perfil de impressão. */
 function switchPrinter(printerId) {
   if (!getPrinter(printerId)) return;
 
@@ -566,11 +880,10 @@ function switchPrinter(printerId) {
   printTempInput.max = printer.limits.maxNozzleTemp;
   bedTempInput.max = printer.limits.maxBedTemp;
   klipperMacrosGroup.hidden = printer.firmware !== 'klipper';
-  removeCustomPrinterBtn.hidden = !isCustomPrinter(printer.id);
-  editCustomPrinterBtn.hidden = !isCustomPrinter(printer.id);
 
   updateConnectionUI(printer);
-  loadProfileForActivePrinter();
+  renderPrintProfileOptions();
+  applyActivePrintProfile();
 
   // A definição da impressora está embutida no motor — troca de impressora obriga a recriar
   slicer = null;
@@ -594,19 +907,6 @@ function switchPrinter(printerId) {
 
   setStatus(`Impressora: ${printer.label}. Carrega um modelo STL ou 3MF para começar.`);
 }
-
-saveProfileBtn.addEventListener('click', () => {
-  const printer = getActivePrinter();
-  localStorage.setItem(profileKey(printer.id), JSON.stringify(collectProfile()));
-  setStatus(`Perfil da ${printer.label} guardado para uso futuro.`);
-});
-
-resetProfileBtn.addEventListener('click', () => {
-  const printer = getActivePrinter();
-  localStorage.removeItem(profileKey(printer.id));
-  applyProfile(defaultProfileFor(printer));
-  setStatus(`Definições da ${printer.label} repostas para as predefinições.`);
-});
 
 // --- Drag & drop / seleção de ficheiro ---
 dropzone.addEventListener('click', () => fileInput.click());
@@ -897,16 +1197,18 @@ function formatDuration(totalMinutes) {
 
 // --- Inicialização ---
 (async function init() {
+  renderMaterialOptions();
+  materialSelect.value = DEFAULT_MATERIAL_ID;
+
   const printer = getActivePrinter();
   printerSubtitle.textContent = printer.label;
   materialHeading.textContent = `Material — ${printer.label} (máx. ${printer.limits.maxNozzleTemp}°C bico / ${printer.limits.maxBedTemp}°C cama)`;
   printTempInput.max = printer.limits.maxNozzleTemp;
   bedTempInput.max = printer.limits.maxBedTemp;
   klipperMacrosGroup.hidden = printer.firmware !== 'klipper';
-  removeCustomPrinterBtn.hidden = !isCustomPrinter(printer.id);
-  editCustomPrinterBtn.hidden = !isCustomPrinter(printer.id);
   updateConnectionUI(printer);
-  loadProfileForActivePrinter();
+  renderPrintProfileOptions();
+  applyActivePrintProfile();
   updateFileGateUI();
   setStatus(`Impressora: ${printer.label}. Confirma a impressora e a ligação (passo 2) antes de carregar um modelo.`);
 

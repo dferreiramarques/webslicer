@@ -14,23 +14,25 @@ fatiamento corre inteiramente no teu computador/telemóvel.
   MK3S** e **Creality CR-X** (bico único) — todas Marlin/Klipper. Muda de
   impressora no painel lateral; a mesa e os limites de temperatura ajustam-se
   automaticamente.
-- **+ Adicionar impressora…** no fundo desse dropdown abre um assistente
-  simples (nome, firmware Marlin/Klipper, dimensões da mesa, bico,
-  temperaturas máximas) para guardares outra impressora neste browser — usa
-  G-code inicial/final genérico e seguro. Uma secção **Definições avançadas**
+- O ícone 🔧 junto ao seletor de impressora abre **Gerir impressoras**: lista
+  as três embutidas (só **Duplicar**, para usares como ponto de partida) e as
+  que tu criaste (**Editar**/**Duplicar**/**Remover**), mais um botão
+  **+ Criar nova impressora**, que abre um assistente simples (nome, firmware
+  Marlin/Klipper, dimensões da mesa, bico, temperaturas máximas) — usa G-code
+  inicial/final genérico e seguro. Uma secção **Definições avançadas**
   (fechada por omissão — 99% dos casos não precisa dela) tem velocidade de
   impressão, aceleração, jerk, retração e altura da gantry.
-  **Duplicar impressora** clona a que tens selecionada (embutida ou
-  personalizada) para o assistente, já preenchido, para ajustares e
-  guardares como nova. Numa impressora personalizada aparecem também
-  **Editar impressora** (guarda por cima da mesma, mesmo id) e **Remover
-  esta impressora personalizada**. Assim que tiveres pelo menos uma
-  impressora personalizada guardada, aparece **Gerir impressoras
-  personalizadas…** junto ao seletor — lista todas com Editar/Remover por
-  linha, sem teres de trocar a impressora ativa só para arrumar a lista.
-- Perfis personalizados: ajusta as definições e carrega em **Guardar perfil**
-  para as reteres por impressora entre sessões (guardado no browser). **Repor
-  predefinições** volta aos valores de fábrica dessa impressora.
+- **Perfis de impressão**: junta tudo o que está no passo 4 (qualidade,
+  enchimento, material, suportes) num perfil com nome, por impressora. O
+  ícone 💾 guarda as definições atuais no perfil selecionado (ou cria um novo,
+  se tiveres "Predefinição" escolhida); o ícone 🔧 abre **Gerir perfis de
+  impressão** (renomear/duplicar/apagar). "Predefinição" volta sempre aos
+  valores de fábrica dessa impressora — não precisas de um botão de reset.
+- **Filamentos**: seletor com specs de material (temp. bico/cama), com quatro
+  genéricos prontos a usar (PLA/PETG/ABS/TPU — PLA por omissão) e o ícone 🔧
+  para **Gerir filamentos** (criar, duplicar os genéricos, editar/remover os
+  teus). Escolher um preenche as temperaturas automaticamente; ajustares à
+  mão depois passa a "Personalizado", sem apagar o filamento escolhido.
 - Preview 3D do modelo sobre a mesa (three.js).
 - Ligação direta à impressora, conforme o firmware: a LK4 Pro (Klipper) liga
   por **IP** ao Mainsail/Moonraker; a Prusa i3 MK3S e a Creality CR-X

@@ -134,6 +134,16 @@ html, body {
 .field.checkbox span { color: var(--text); }
 .field.small { margin-top: 8px; }
 
+.field-with-tool { display: flex; align-items: flex-end; gap: 6px; }
+.field-with-tool .field { flex: 1; min-width: 0; margin-bottom: 10px; }
+.icon-btn {
+  flex-shrink: 0; width: 34px; height: 34px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1;
+  background: var(--bg-raised); color: var(--text); border: 1px solid var(--border);
+}
+.icon-btn:hover:not(:disabled) { border-color: var(--accent); }
+
 input[type="number"], input[type="text"], select {
   background: var(--bg-raised); border: 1px solid var(--border); color: var(--text);
   border-radius: 6px; padding: 7px 9px; font-family: var(--mono); font-size: 12.5px;
